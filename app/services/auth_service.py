@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
-from typing import Dict, Any
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, Union, Optional
 import jwt
 import uuid
 import bcrypt
@@ -12,12 +12,24 @@ from models.user import User, AuthTokens, JWTPayload, GoogleProfile
 from services.user_service import user_service
 
 
+UserLike = Union[User, Dict[str, Any]]
+
+
 class AuthService:
     def __init__(self):
         self.jwt_secret = os.getenv("JWT_SECRET", "fallback-secret-change-in-production")
         self.jwt_expires_in = os.getenv("JWT_EXPIRES_IN", "7d")
         self.refresh_token_secret = os.getenv("REFRESH_TOKEN_SECRET", "fallback-refresh-secret")
         self.refresh_token_expires_in = os.getenv("REFRESH_TOKEN_EXPIRES_IN", "30d")
+
+    # small helper to access both dicts and objects
+    def _get(self, user: UserLike, key: str, default: Optional[Any] = None) -> Any:
+        if user is None:
+            return default
+        if isinstance(user, dict):
+            return user.get(key, default)
+        # fallback to attribute access for objects/SQLModel/Pydantic instances
+        return getattr(user, key, default)
 
     async def register(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -37,9 +49,15 @@ class AuthService:
         user = await user_service.create_user(user_data)
 
         # Generate tokens
-        tokens = await self.generate_tokens(user)
-
-        return {"user": user, "tokens": tokens}
+        try:
+            tokens = await self.generate_tokens(user)
+            return {"user": self.sanitize_user(user), "tokens": tokens}
+        except Exception as e:
+            print(f"[ERROR] Token generation failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate authentication tokens"
+            )
 
     async def login(self, credentials: Dict[str, str]) -> Dict[str, Any]:
         """
@@ -54,21 +72,25 @@ class AuthService:
                 detail="Invalid email or password"
             )
 
-        # Check if user has password (traditional login) or google_id (Google OAuth)
-        if not user.password and user.google_id:
+        # read password and google_id via helper
+        stored_password = self._get(user, "password")
+        google_id = self._get(user, "google_id")
+
+        # If no stored password but google_id exists -> google oauth account
+        if not stored_password and google_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This account uses Google OAuth. Please sign in with Google."
             )
 
-        if not user.password:
+        if not stored_password:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
 
-        # Validate password
-        is_valid_password = await user_service.validate_password(credentials["password"], user.password)
+        # Validate password - ensure validate_password in user_service accepts (plain, hashed)
+        is_valid_password = await user_service.validate_password(credentials["password"], stored_password)
         if not is_valid_password:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -76,14 +98,9 @@ class AuthService:
             )
 
         # Check if user is active
-        print(f"User isActive check: {user.is_active}, type: {type(user.is_active)}")  # Debug logging
-        print(f"Full user object: {user.__dict__}")  # Debug logging
-
-        # Convert to boolean if needed
-        is_active = bool(user.is_active)
+        is_active = bool(self._get(user, "is_active", True))
 
         if not is_active:
-            print("User is inactive, throwing error")  # Debug logging
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is deactivated. Please contact support."
@@ -92,7 +109,7 @@ class AuthService:
         # Generate tokens
         tokens = await self.generate_tokens(user)
 
-        return {"user": user, "tokens": tokens}
+        return {"user": self.sanitize_user(user), "tokens": tokens}
 
     async def authenticate_with_google(self, profile: GoogleProfile) -> Dict[str, Any]:
         """
@@ -125,51 +142,46 @@ class AuthService:
                 user = await user_service.create_user(user_data)
                 is_new_user = True
 
-        elif not user.is_active:
+        elif not bool(self._get(user, "is_active", True)):
             # Existing user but deactivated - reactivate and link Google account
-            print(f"Reactivating user: {user.id} with Google ID: {profile.id}")
-
+            uid = self._get(user, "id")
             try:
-                update_result = await user_service.update_user(user.id, {
+                update_result = await user_service.update_user(uid, {
                     "google_id": profile.id,
                     "is_active": True,
                     "email_verified": profile.verified_email
                 })
 
                 if not update_result:
-                    print(f"Update user returned null for user ID: {user.id if user else 'unknown'}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Failed to update user in database"
                     )
 
-                updated_user_id = user.id
-                user = await user_service.find_by_id(updated_user_id)
+                user = await user_service.find_by_id(uid)
 
                 if not user:
-                    print(f"Failed to find updated user with ID: {updated_user_id}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Failed to retrieve updated user from database"
                     )
 
-                print(f"Successfully reactivated user: {user.id}, is_active: {user.is_active}")
                 is_new_user = False
 
             except Exception as error:
-                print(f"Error during user reactivation: {error}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Account reactivation failed. Please contact support."
                 )
 
-        elif not user.google_id:
+        elif not self._get(user, "google_id"):
             # Existing active user, just link Google account
-            await user_service.update_user(user.id, {"google_id": profile.id})
-            user = await user_service.find_by_id(user.id)
+            uid = self._get(user, "id")
+            await user_service.update_user(uid, {"google_id": profile.id})
+            user = await user_service.find_by_id(uid)
             is_new_user = False
 
-        if not user or not user.is_active:
+        if not user or not bool(self._get(user, "is_active", True)):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Account reactivation failed. Please contact support."
@@ -178,7 +190,7 @@ class AuthService:
         # Generate tokens
         tokens = await self.generate_tokens(user)
 
-        return {"user": user, "tokens": tokens, "is_new_user": is_new_user}
+        return {"user": self.sanitize_user(user), "tokens": tokens, "is_new_user": is_new_user}
 
     async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
         """
@@ -189,8 +201,8 @@ class AuthService:
             decoded = jwt.decode(refresh_token, self.refresh_token_secret, algorithms=["HS256"])
 
             # Find user
-            user = await user_service.find_by_id(decoded["id"])
-            if not user or not user.is_active:
+            user = await user_service.find_by_id(decoded.get("id"))
+            if not user or not bool(self._get(user, "is_active", True)):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid refresh token"
@@ -199,7 +211,7 @@ class AuthService:
             # Generate new tokens
             tokens = await self.generate_tokens(user)
 
-            return {"user": user, "tokens": tokens}
+            return {"user": self.sanitize_user(user), "tokens": tokens}
 
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -212,25 +224,48 @@ class AuthService:
                 detail="Invalid refresh token"
             )
 
-    async def generate_tokens(self, user: User) -> AuthTokens:
+    async def generate_tokens(self, user: UserLike) -> AuthTokens:
         """
         Generate access and refresh tokens for a user
         """
+        uid = self._get(user, "id")
+        email = self._get(user, "email")
+        role = self._get(user, "role")
+        subscription_tier = self._get(user, "subscription_tier")
+        usage_count = self._get(user, "usage_count")
+        monthly_limit = self._get(user, "monthly_limit")
+        last_usage_reset = self._get(user, "last_usage_reset")
+        billing_period_start = self._get(user, "billing_period_start")
+
+        # Helper to convert datetime to ISO string, or return None
+        def _iso_or_none(val):
+            if val is None:
+                return None
+            if isinstance(val, str):
+                return val
+            if isinstance(val, datetime):
+                if val.tzinfo is None:
+                    val = val.replace(tzinfo=timezone.utc)
+                return val.isoformat()
+            return str(val)
+
         payload = {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role,
-            "subscription_tier": user.subscription_tier,
-            "usage_count": user.usage_count,
-            "monthly_limit": user.monthly_limit,
-            "last_usage_reset": user.last_usage_reset.isoformat() if user.last_usage_reset else None,
-            "billing_period_start": user.billing_period_start.isoformat() if user.billing_period_start else None
+            "id": uid,
+            "email": email,
+            "role": role,
+            "subscription_tier": subscription_tier,
+            "usage_count": usage_count,
+            "monthly_limit": monthly_limit,
+            "last_usage_reset": _iso_or_none(last_usage_reset),
+            "billing_period_start": _iso_or_none(billing_period_start),
+            "iat": int(datetime.now(timezone.utc).timestamp())  # issued at
         }
 
-        # Parse expiration times (assuming they're like "7d", "30d", etc.)
+        # Generate expiration timestamps for access and refresh tokens
         access_exp = self._parse_expiration_time(self.jwt_expires_in)
         refresh_exp = self._parse_expiration_time(self.refresh_token_expires_in)
 
+        # Generate JWTs using HS256
         access_token = jwt.encode(
             {**payload, "exp": access_exp},
             self.jwt_secret,
@@ -238,13 +273,12 @@ class AuthService:
         )
 
         refresh_token = jwt.encode(
-            {"id": user.id, "email": user.email, "exp": refresh_exp},
+            {"id": uid, "email": email, "exp": refresh_exp, "iat": payload["iat"]},
             self.refresh_token_secret,
             algorithm="HS256"
         )
 
-        return AuthTokens(access_token=access_token, refresh_token=refresh_token)
-
+        return AuthTokens(accessToken=access_token, refreshToken=refresh_token)
     async def verify_token(self, token: str) -> JWTPayload:
         """
         Verify and decode JWT token
@@ -309,23 +343,40 @@ class AuthService:
             detail="Email verification functionality needs to be implemented with database storage"
         )
 
-    def sanitize_user(self, user: User) -> Dict[str, Any]:
+    def sanitize_user(self, user: UserLike) -> Dict[str, Any]:
         """
         Get user profile (without sensitive data)
         """
-        user_dict = user.__dict__.copy() if hasattr(user, '__dict__') else dict(user)
-        
+        # produce a mutable dict
+        if user is None:
+            return {}
+
+        if isinstance(user, dict):
+            user_dict = user.copy()
+        else:
+            # object -> convert to dict using .dict() if available, else __dict__
+            if hasattr(user, "dict"):
+                user_dict = user.dict()
+            elif hasattr(user, "__dict__"):
+                user_dict = dict(user.__dict__)
+            else:
+                # fallback: try to build dict from known attributes
+                user_dict = {
+                    "id": getattr(user, "id", None),
+                    "email": getattr(user, "email", None),
+                }
+
         # Remove sensitive fields
         sensitive_fields = [
-            "password", 
-            "email_verification_token", 
-            "password_reset_token", 
+            "password",
+            "email_verification_token",
+            "password_reset_token",
             "password_reset_expires"
         ]
-        
+
         for field in sensitive_fields:
             user_dict.pop(field, None)
-        
+
         return user_dict
 
     def validate_password(self, password: str) -> Dict[str, Any]:
@@ -365,8 +416,11 @@ class AuthService:
         """
         Parse expiration time string (e.g., "7d", "30d") to timestamp
         """
-        now = datetime.utcnow()
-        
+        now = datetime.now(tz=timezone.utc)
+
+        if not time_str:
+            time_str = "7d"
+
         if time_str.endswith('d'):
             days = int(time_str[:-1])
             exp_time = now + timedelta(days=days)
@@ -379,7 +433,8 @@ class AuthService:
         else:
             # Default to 7 days if format is not recognized
             exp_time = now + timedelta(days=7)
-        
+
+        # return unix timestamp (int)
         return int(exp_time.timestamp())
 
 
