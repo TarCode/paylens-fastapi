@@ -21,23 +21,23 @@ from validation.auth_validation import (
 
 # Additional Pydantic Models (beyond those in auth_validation)
 class RefreshTokenRequest(BaseModel):
-    refreshToken: str
+    refresh_token: str
 
 class UpdateProfileRequest(BaseModel):
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
-    companyName: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
 
 class ChangePasswordRequest(BaseModel):
-    currentPassword: str
-    newPassword: str
+    current_password: str
+    new_password: str
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    newPassword: str
+    new_password: str
 
 class GoogleJWTRequest(BaseModel):
     credential: str
@@ -57,7 +57,7 @@ class PasswordResetResponse(BaseModel):
 class GoogleAuthResponse(BaseModel):
     user: Dict[str, Any]
     tokens: Dict[str, str]
-    isNewUser: bool
+    is_new_user: bool
 
 # Router
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -75,9 +75,9 @@ async def register(request: RegisterData):
         result = await auth_service.register({
             "email": request.email,
             "password": request.password,
-            "firstName": request.firstName,
-            "lastName": request.lastName,
-            "companyName": request.companyName
+            "first_name": request.first_name,
+            "last_name": request.last_name,
+            "company_name": request.company_name
         })
 
         sanitized_user = auth_service.sanitize_user(result["user"])
@@ -102,8 +102,8 @@ async def login(request: LoginData):
         })
 
         print(f"Login result user: {result['user']}")  # Debug logging
-        print(f"isActive type: {type(result['user'].get('isActive'))}")  # Debug logging
-        print(f"isActive value: {result['user'].get('isActive')}")  # Debug logging
+        print(f"is_active type: {type(result['user'].get('is_active'))}")  # Debug logging
+        print(f"is_active value: {result['user'].get('is_active')}")  # Debug logging
 
         sanitized_user = auth_service.sanitize_user(result["user"])
 
@@ -121,10 +121,10 @@ async def login(request: LoginData):
 async def refresh_token(request: RefreshTokenRequest):
     """Refresh access token"""
     try:
-        if not request.refreshToken:
+        if not request.refresh_token:
             return bad_request("Refresh token is required")
 
-        result = await auth_service.refresh_token(request.refreshToken)
+        result = await auth_service.refresh_token(request.refresh_token)
         sanitized_user = auth_service.sanitize_user(result["user"])
 
         return ok({
@@ -157,12 +157,12 @@ async def update_profile(
     """Update user profile"""
     try:
         update_data = {}
-        if request.firstName is not None:
-            update_data["firstName"] = request.firstName
-        if request.lastName is not None:
-            update_data["lastName"] = request.lastName
-        if request.companyName is not None:
-            update_data["companyName"] = request.companyName
+        if request.first_name is not None:
+            update_data["first_name"] = request.first_name
+        if request.last_name is not None:
+            update_data["last_name"] = request.last_name
+        if request.company_name is not None:
+            update_data["company_name"] = request.company_name
 
         updated_user = await user_service.update_user(current_user["id"], update_data)
         if not updated_user:
@@ -181,11 +181,11 @@ async def change_password(
 ):
     """Change user password"""
     try:
-        if not request.currentPassword or not request.newPassword:
+        if not request.current_password or not request.new_password:
             return bad_request("Current password and new password are required")
 
         # Validate new password strength
-        password_validation = auth_service.validate_password(request.newPassword)
+        password_validation = auth_service.validate_password(request.new_password)
         if not password_validation["is_valid"]:
             return bad_request({
                 "errors": password_validation["errors"],
@@ -203,14 +203,14 @@ async def change_password(
 
         # Validate current password
         is_valid_current_password = await user_service.validate_password(
-            request.currentPassword, 
+            request.current_password, 
             user["password"]
         )
         if not is_valid_current_password:
             return bad_request("Current password is incorrect")
 
         # Update password
-        await user_service.update_password(current_user["id"], request.newPassword)
+        await user_service.update_password(current_user["id"], request.new_password)
 
         return created(message="Password changed successfully")
 
@@ -241,15 +241,15 @@ async def forgot_password(request: ForgotPasswordRequest):
 async def reset_password(request: ResetPasswordRequest):
     """Reset password with token"""
     try:
-        if not request.token or not request.newPassword:
+        if not request.token or not request.new_password:
             return bad_request("Token and new password are required")
 
         # Validate password strength
-        password_validation = auth_service.validate_password(request.newPassword)
+        password_validation = auth_service.validate_password(request.new_password)
         if not password_validation["is_valid"]:
             return bad_request("Password does not meet requirements")
 
-        await auth_service.reset_password(request.token, request.newPassword)
+        await auth_service.reset_password(request.token, request.new_password)
 
         return ok({
             "success": True,
@@ -279,7 +279,7 @@ async def google_auth_callback(request: Request):
         return ok({
             "user": sanitized_user,
             "tokens": result["tokens"],
-            "isNewUser": result["isNewUser"]
+            "is_new_user": result["is_new_user"]
         })
 
     except Exception as e:
@@ -320,7 +320,7 @@ async def google_jwt_auth(request: GoogleJWTRequest):
         return created({
             "user": sanitized_user,
             "tokens": result["tokens"],
-            "isNewUser": result["isNewUser"]
+            "is_new_user": result["is_new_user"]
         }, "Google authentication successful")
 
     except Exception as e:
