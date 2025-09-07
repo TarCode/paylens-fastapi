@@ -12,10 +12,10 @@ class UserService:
         """Create a new user in the database"""
         email = user_data.get("email")
         password = user_data.get("password")
-        google_id = user_data.get("googleId")
-        first_name = user_data.get("firstName")
-        last_name = user_data.get("lastName")
-        company_name = user_data.get("companyName")
+        google_id = user_data.get("google_id")
+        first_name = user_data.get("first_name")
+        last_name = user_data.get("last_name")
+        company_name = user_data.get("company_name")
 
         # Hash password if provided (for traditional registration)
         hashed_password = None
