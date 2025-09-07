@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field
 from pydantic import EmailStr, BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -190,3 +190,84 @@ def validated_to_userdb(user_validated: UserDBValidated) -> UserDB:
         created_at=user_validated.created_at,
         updated_at=user_validated.updated_at
     )
+
+class User(BaseModel):
+    id: str
+    email: str
+    password: Optional[str] = None  # Optional for Google OAuth users
+    googleId: Optional[str] = None  # Google OAuth ID
+    firstName: str
+    lastName: str
+    companyName: Optional[str] = None
+    role: Literal['user', 'admin']
+    subscriptionTier: Literal['free', 'pro', 'business', 'enterprise']
+    monthlyLimit: int
+    usageCount: int
+    lastUsageReset: datetime
+    billingPeriodStart: datetime
+    isActive: bool
+    emailVerified: bool
+    emailVerificationToken: Optional[str] = None
+    passwordResetToken: Optional[str] = None
+    passwordResetExpires: Optional[datetime] = None
+    stripeCustomerId: Optional[str] = None
+    subscriptionId: Optional[str] = None
+    subscriptionStatus: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class CreateUserData(BaseModel):
+    email: str
+    password: Optional[str] = None  # Optional for Google OAuth users
+    googleId: Optional[str] = None  # Google OAuth ID
+    firstName: str
+    lastName: str
+    companyName: Optional[str] = None
+
+
+class UpdateUserData(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    companyName: Optional[str] = None
+    googleId: Optional[str] = None
+    role: Optional[Literal['user', 'admin']] = None
+    isActive: Optional[bool] = None
+    emailVerified: Optional[bool] = None
+    subscriptionTier: Optional[Literal['free', 'pro', 'business', 'enterprise']] = None
+    monthlyLimit: Optional[int] = None
+    usageCount: Optional[int] = None
+    lastUsageReset: Optional[datetime] = None
+    billingPeriodStart: Optional[datetime] = None
+
+
+class LoginData(BaseModel):
+    email: str
+    password: str
+
+
+class AuthTokens(BaseModel):
+    accessToken: str
+    refreshToken: str
+
+
+class JWTPayload(BaseModel):
+    id: str
+    email: str
+    role: str
+    subscriptionTier: str
+    usageCount: int
+    monthlyLimit: int
+    lastUsageReset: datetime
+    billingPeriodStart: datetime
+
+
+class GoogleProfile(BaseModel):
+    id: str
+    email: str
+    verified_email: bool
+    name: str
+    given_name: str
+    family_name: str
+    picture: str
+    locale: str
