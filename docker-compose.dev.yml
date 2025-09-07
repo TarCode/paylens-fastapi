@@ -1,0 +1,13 @@
+version: "3.10"
+services:
+  fastapi_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: paylens_fastapi
+    ports:
+      - "8000:80"
+    volumes:
+      - ./app:/app
+    environment:
+      - ENV=production
