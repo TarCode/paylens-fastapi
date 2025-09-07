@@ -11,11 +11,11 @@ class User(BaseModel):
     id: str
     email: str
     role: str
-    subscriptionTier: str
-    usageCount: int
-    monthlyLimit: int
-    lastUsageReset: datetime
-    billingPeriodStart: datetime
+    subscription_tier: str
+    usage_count: int
+    monthly_limit: int
+    last_usage_reset: datetime
+    billing_period_start: datetime
 
 
 class AuthMiddleware:
@@ -61,11 +61,11 @@ class AuthMiddleware:
                 id=decoded.get('id'),
                 email=decoded.get('email'),
                 role=decoded.get('role', 'user'),
-                subscriptionTier=decoded.get('subscriptionTier', 'free'),
-                usageCount=decoded.get('usageCount', 0),
-                monthlyLimit=decoded.get('monthlyLimit', 100),
-                lastUsageReset=datetime.fromisoformat(decoded.get('lastUsageReset', datetime.now().isoformat())),
-                billingPeriodStart=datetime.fromisoformat(decoded.get('billingPeriodStart', datetime.now().isoformat()))
+                subscription_tier=decoded.get('subscription_tier', 'free'),
+                usage_count=decoded.get('usage_count', 0),
+                monthly_limit=decoded.get('monthly_limit', 100),
+                last_usage_reset=datetime.fromisoformat(decoded.get('last_usage_reset', datetime.now().isoformat())),
+                billing_period_start=datetime.fromisoformat(decoded.get('billing_period_start', datetime.now().isoformat()))
             )
             
             return user
@@ -121,11 +121,11 @@ class AuthMiddleware:
                 id=decoded.get('id'),
                 email=decoded.get('email'),
                 role=decoded.get('role', 'user'),
-                subscriptionTier=decoded.get('subscriptionTier', 'free'),
-                usageCount=decoded.get('usageCount', 0),
-                monthlyLimit=decoded.get('monthlyLimit', 100),
-                lastUsageReset=datetime.fromisoformat(decoded.get('lastUsageReset', datetime.now().isoformat())),
-                billingPeriodStart=datetime.fromisoformat(decoded.get('billingPeriodStart', datetime.now().isoformat()))
+                subscription_tier=decoded.get('subscription_tier', 'free'),
+                usage_count=decoded.get('usage_count', 0),
+                monthly_limit=decoded.get('monthly_limit', 100),
+                last_usage_reset=datetime.fromisoformat(decoded.get('last_usage_reset', datetime.now().isoformat())),
+                billing_period_start=datetime.fromisoformat(decoded.get('billing_period_start', datetime.now().isoformat()))
             )
             
             return user
