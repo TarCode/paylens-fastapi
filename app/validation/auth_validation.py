@@ -2,7 +2,7 @@ from typing import Any, Optional, Dict, List
 from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field, validator
-import re
+from fastapi.encoders import jsonable_encoder
 
 
 # Response Utilities
@@ -22,7 +22,7 @@ def ok(data: Optional[Any] = None) -> JSONResponse:
     response_data = {"success": True}
     if data is not None:
         response_data["data"] = data
-    return JSONResponse(content=response_data)
+    return JSONResponse(content=jsonable_encoder(response_data))
 
 
 def created(data: Optional[Any] = None, message: Optional[str] = None) -> JSONResponse:
@@ -32,7 +32,8 @@ def created(data: Optional[Any] = None, message: Optional[str] = None) -> JSONRe
         response_data["message"] = message
     if data is not None:
         response_data["data"] = data
-    return JSONResponse(status_code=201, content=response_data)
+    # use jsonable_encoder to handle datetime/UUID etc.
+    return JSONResponse(status_code=201, content=jsonable_encoder(response_data))
 
 
 def bad_request(error: Any, message: str = "Bad request") -> HTTPException:
