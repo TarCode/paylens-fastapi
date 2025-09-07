@@ -1,5 +1,36 @@
-version: "3.10"
 services:
+  resetdb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./wait-for-db.sh", "db", "5432", "python", "app/scripts/migrate.py", "down"]
+    environment:
+      PYTHONPATH: app
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - db
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./wait-for-db.sh", "db", "5432", "python", "app/scripts/migrate.py", "up"]
+    environment:
+      PYTHONPATH: app
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - db
+      - resetdb
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   fastapi_app:
     depends_on:
       - db
@@ -12,13 +43,7 @@ services:
     volumes:
       - ./app:/app
     environment:
-      - ENV=${ENV}
-      - DATABASE_URL=${DATABASE_URL_DOCKER}
-  db:
-    image: postgres:15
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: dbname
+      ENV: ${ENV}
+      DATABASE_URL: ${DATABASE_URL}
+volumes:
+  postgres_data:

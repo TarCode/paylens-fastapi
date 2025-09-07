@@ -125,15 +125,14 @@ class DatabaseMigrator:
     async def drop_tables(self):
         """Drop all tables"""
         logger.info("Dropping all tables...")
-        
-        # Drop triggers first
         await self.safe_execute("DROP TRIGGER IF EXISTS update_users_updated_at ON users;", "Drop trigger")
         await self.safe_execute("DROP FUNCTION IF EXISTS update_updated_at_column();", "Drop trigger function")
-        
-        # Drop tables
         SQLModel.metadata.drop_all(self.engine)
-        
         logger.info("✅ All tables dropped successfully!")
+        # Verify tables are gone
+        inspector = inspect(self.engine)
+        tables = inspector.get_table_names()
+        logger.info(f"Tables remaining after drop: {tables}")
 
     def check_table_exists(self, table_name: str) -> bool:
         """Check if a table exists"""
@@ -269,6 +268,9 @@ async def main():
     
     if len(sys.argv) > 1:
         command = sys.argv[1].lower()
+        if not database_url:
+            logger.error("DATABASE_URL is not set. Please check your environment or .env file.")
+            sys.exit(1)
         
         if command == "down":
             await migrator.drop_tables()

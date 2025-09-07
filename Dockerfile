@@ -9,12 +9,12 @@ COPY requirements.txt .
 
 # Upgrade system packages to patch vulnerabilities and install security updates
 RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get dist-upgrade -y && \
-    apt-get install --only-upgrade python3 python3-pip -y && \
-    apt-get autoremove -y && \
+    apt-get install -y python3 python3-pip netcat-openbsd && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+
+RUN apt-get install -y netcat
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
