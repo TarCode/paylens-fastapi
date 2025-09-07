@@ -278,7 +278,7 @@ class AuthService:
             algorithm="HS256"
         )
 
-        return AuthTokens(accessToken=access_token, refreshToken=refresh_token)
+        return AuthTokens(access_token=access_token, refresh_token=refresh_token)
     async def verify_token(self, token: str) -> JWTPayload:
         """
         Verify and decode JWT token
