@@ -8,11 +8,8 @@ import os
 from fastapi import HTTPException, status
 
 # Import your existing models and services
-from models.user import User, AuthTokens, JWTPayload, GoogleProfile
+from models.user import UserInternal, UserResponse, AuthTokens, JWTPayload, GoogleProfile, CreateUserData
 from services.user_service import user_service
-
-
-UserLike = Union[User, Dict[str, Any]]
 
 
 class AuthService:
@@ -22,23 +19,18 @@ class AuthService:
         self.refresh_token_secret = os.getenv("REFRESH_TOKEN_SECRET", "fallback-refresh-secret")
         self.refresh_token_expires_in = os.getenv("REFRESH_TOKEN_EXPIRES_IN", "30d")
 
-    # small helper to access both dicts and objects
-    def _get(self, user: UserLike, key: str, default: Optional[Any] = None) -> Any:
+    # Helper to access user attributes from Pydantic models
+    def _get(self, user: UserInternal, key: str, default: Optional[Any] = None) -> Any:
         if user is None:
             return default
-        if isinstance(user, dict):
-            return user.get(key, default)
-        # fallback to attribute access for objects/SQLModel/Pydantic instances
         return getattr(user, key, default)
 
-    async def register(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def register(self, user_data: CreateUserData) -> Dict[str, Any]:
         """
         Register a new user
-        user_data should contain: email, password (optional), google_id (optional), 
-        first_name, last_name, company_name (optional)
         """
         # Check if user already exists
-        existing_user = await user_service.find_by_email(user_data["email"])
+        existing_user = await user_service.find_by_email(user_data.email)
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -51,7 +43,7 @@ class AuthService:
         # Generate tokens
         try:
             tokens = await self.generate_tokens(user)
-            return {"user": self.sanitize_user(user), "tokens": tokens}
+            return {"user": user.to_user_response(), "tokens": tokens}
         except Exception as e:
             print(f"[ERROR] Token generation failed: {e}")
             raise HTTPException(
@@ -109,7 +101,7 @@ class AuthService:
         # Generate tokens
         tokens = await self.generate_tokens(user)
 
-        return {"user": self.sanitize_user(user), "tokens": tokens}
+        return {"user": user.to_user_response(), "tokens": tokens}
 
     async def authenticate_with_google(self, profile: GoogleProfile) -> Dict[str, Any]:
         """
@@ -126,18 +118,13 @@ class AuthService:
 
             if not user:
                 # Create new user from Google profile
-                user_data = {
-                    "email": profile.email,
-                    "google_id": profile.id,
-                    "first_name": profile.given_name,
-                    "last_name": profile.family_name,
-                    "email_verified": profile.verified_email,
-                    "is_active": True,
-                    "role": "user",
-                    "subscription_tier": "free",
-                    "monthly_limit": 100,
-                    "usage_count": 0
-                }
+                from models.user import CreateUserData
+                user_data = CreateUserData(
+                    email=profile.email,
+                    google_id=profile.id,
+                    first_name=profile.given_name,
+                    last_name=profile.family_name
+                )
 
                 user = await user_service.create_user(user_data)
                 is_new_user = True
@@ -146,11 +133,13 @@ class AuthService:
             # Existing user but deactivated - reactivate and link Google account
             uid = self._get(user, "id")
             try:
-                update_result = await user_service.update_user(uid, {
-                    "google_id": profile.id,
-                    "is_active": True,
-                    "email_verified": profile.verified_email
-                })
+                from models.user import UpdateUserData
+                update_data = UpdateUserData(
+                    google_id=profile.id,
+                    is_active=True,
+                    email_verified=profile.verified_email
+                )
+                update_result = await user_service.update_user(uid, update_data)
 
                 if not update_result:
                     raise HTTPException(
@@ -177,7 +166,9 @@ class AuthService:
         elif not self._get(user, "google_id"):
             # Existing active user, just link Google account
             uid = self._get(user, "id")
-            await user_service.update_user(uid, {"google_id": profile.id})
+            from models.user import UpdateUserData
+            update_data = UpdateUserData(google_id=profile.id)
+            await user_service.update_user(uid, update_data)
             user = await user_service.find_by_id(uid)
             is_new_user = False
 
@@ -190,7 +181,7 @@ class AuthService:
         # Generate tokens
         tokens = await self.generate_tokens(user)
 
-        return {"user": self.sanitize_user(user), "tokens": tokens, "is_new_user": is_new_user}
+        return {"user": user.to_user_response(), "tokens": tokens, "is_new_user": is_new_user}
 
     async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
         """
@@ -211,7 +202,7 @@ class AuthService:
             # Generate new tokens
             tokens = await self.generate_tokens(user)
 
-            return {"user": self.sanitize_user(user), "tokens": tokens}
+            return {"user": user.to_user_response(), "tokens": tokens}
 
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -224,18 +215,19 @@ class AuthService:
                 detail="Invalid refresh token"
             )
 
-    async def generate_tokens(self, user: UserLike) -> AuthTokens:
+    async def generate_tokens(self, user: UserInternal) -> AuthTokens:
         """
         Generate access and refresh tokens for a user
         """
-        uid = self._get(user, "id")
-        email = self._get(user, "email")
-        role = self._get(user, "role")
-        subscription_tier = self._get(user, "subscription_tier")
-        usage_count = self._get(user, "usage_count")
-        monthly_limit = self._get(user, "monthly_limit")
-        last_usage_reset = self._get(user, "last_usage_reset")
-        billing_period_start = self._get(user, "billing_period_start")
+        uid = user.id
+        email = user.email
+        # Handle both enum and string values
+        role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        subscription_tier = user.subscription_tier.value if hasattr(user.subscription_tier, 'value') else str(user.subscription_tier)
+        usage_count = user.usage_count
+        monthly_limit = user.monthly_limit
+        last_usage_reset = user.last_usage_reset
+        billing_period_start = user.billing_period_start
 
         # Helper to convert datetime to ISO string, or return None
         def _iso_or_none(val):
@@ -343,41 +335,6 @@ class AuthService:
             detail="Email verification functionality needs to be implemented with database storage"
         )
 
-    def sanitize_user(self, user: UserLike) -> Dict[str, Any]:
-        """
-        Get user profile (without sensitive data)
-        """
-        # produce a mutable dict
-        if user is None:
-            return {}
-
-        if isinstance(user, dict):
-            user_dict = user.copy()
-        else:
-            # object -> convert to dict using .dict() if available, else __dict__
-            if hasattr(user, "dict"):
-                user_dict = user.dict()
-            elif hasattr(user, "__dict__"):
-                user_dict = dict(user.__dict__)
-            else:
-                # fallback: try to build dict from known attributes
-                user_dict = {
-                    "id": getattr(user, "id", None),
-                    "email": getattr(user, "email", None),
-                }
-
-        # Remove sensitive fields
-        sensitive_fields = [
-            "password",
-            "email_verification_token",
-            "password_reset_token",
-            "password_reset_expires"
-        ]
-
-        for field in sensitive_fields:
-            user_dict.pop(field, None)
-
-        return user_dict
 
     def validate_password(self, password: str) -> Dict[str, Any]:
         """

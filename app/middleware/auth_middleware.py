@@ -5,13 +5,14 @@ from typing import Optional
 from fastapi import Depends, Request, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from models.user import UserRole, SubscriptionTier
 
 
 class User(BaseModel):
     id: str
     email: str
-    role: str
-    subscription_tier: str
+    role: UserRole
+    subscription_tier: SubscriptionTier
     usage_count: int
     monthly_limit: int
     last_usage_reset: datetime
@@ -60,8 +61,8 @@ class AuthMiddleware:
             user = User(
                 id=decoded.get('id'),
                 email=decoded.get('email'),
-                role=decoded.get('role', 'user'),
-                subscription_tier=decoded.get('subscription_tier', 'free'),
+                role=UserRole(decoded.get('role', 'user')),
+                subscription_tier=SubscriptionTier(decoded.get('subscription_tier', 'free')),
                 usage_count=decoded.get('usage_count', 0),
                 monthly_limit=decoded.get('monthly_limit', 100),
                 last_usage_reset=datetime.fromisoformat(decoded.get('last_usage_reset', datetime.now().isoformat())),
@@ -120,8 +121,8 @@ class AuthMiddleware:
             user = User(
                 id=decoded.get('id'),
                 email=decoded.get('email'),
-                role=decoded.get('role', 'user'),
-                subscription_tier=decoded.get('subscription_tier', 'free'),
+                role=UserRole(decoded.get('role', 'user')),
+                subscription_tier=SubscriptionTier(decoded.get('subscription_tier', 'free')),
                 usage_count=decoded.get('usage_count', 0),
                 monthly_limit=decoded.get('monthly_limit', 100),
                 last_usage_reset=datetime.fromisoformat(decoded.get('last_usage_reset', datetime.now().isoformat())),

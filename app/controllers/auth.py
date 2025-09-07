@@ -6,7 +6,7 @@ import json
 import base64
 from services.auth_service import auth_service
 from services.user_service import user_service
-from models.user import GoogleProfile
+from models.user import GoogleProfile, UserResponse, UserInternal, AuthTokens
 from middleware.auth_middleware import get_current_user
 from validation.auth_validation import (
     bad_request,
@@ -43,20 +43,20 @@ class GoogleJWTRequest(BaseModel):
     credential: str
 
 # Response Models
-class UserResponse(BaseModel):
-    user: Dict[str, Any]
-    tokens: Dict[str, str]
+class AuthResponse(BaseModel):
+    user: UserResponse
+    tokens: AuthTokens
 
 class ProfileResponse(BaseModel):
-    user: Dict[str, Any]
+    user: UserResponse
 
 class PasswordResetResponse(BaseModel):
     success: bool
     message: str
 
 class GoogleAuthResponse(BaseModel):
-    user: Dict[str, Any]
-    tokens: Dict[str, str]
+    user: UserResponse
+    tokens: AuthTokens
     is_new_user: bool
 
 # Router
@@ -72,24 +72,28 @@ async def register(request: RegisterData):
         if not password_validation["is_valid"]:
             return bad_request(password_validation["errors"], "Password validation failed")
 
-        result = await auth_service.register({
-            "email": request.email,
-            "password": request.password,
-            "first_name": request.first_name,
-            "last_name": request.last_name,
-            "company_name": request.company_name
-        })
-
-        sanitized_user = auth_service.sanitize_user(result["user"])
+        # Convert RegisterData to CreateUserData
+        from models.user import CreateUserData
+        create_data = CreateUserData(
+            email=request.email,
+            password=request.password,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            company_name=request.company_name
+        )
+        result = await auth_service.register(create_data)
 
         return created({
-            "user": sanitized_user,
+            "user": result["user"],
             "tokens": result["tokens"]
         }, "User registered successfully")
 
-    except ValueError as e:
-        if str(e) == "User with this email already exists":
-            return bad_request(str(e), "Registration failed")
+    except HTTPException as e:
+        if e.status_code == 400:
+            return bad_request(e.detail, "Registration failed")
+        return server_error("Registration failed")
+    except Exception as e:
+        print(f"[ERROR] Registration failed: {e}")
         return server_error("Registration failed")
 
 @router.post("/login")
@@ -101,14 +105,8 @@ async def login(request: LoginData):
             "password": request.password
         })
 
-        print(f"Login result user: {result['user']}")  # Debug logging
-        print(f"is_active type: {type(result['user'].get('is_active'))}")  # Debug logging
-        print(f"is_active value: {result['user'].get('is_active')}")  # Debug logging
-
-        sanitized_user = auth_service.sanitize_user(result["user"])
-
         return ok({
-            "user": sanitized_user,
+            "user": result["user"],
             "tokens": result["tokens"]
         })
 
@@ -125,10 +123,9 @@ async def refresh_token(request: RefreshTokenRequest):
             return bad_request("Refresh token is required")
 
         result = await auth_service.refresh_token(request.refresh_token)
-        sanitized_user = auth_service.sanitize_user(result["user"])
 
         return ok({
-            "user": sanitized_user,
+            "user": result["user"],
             "tokens": result["tokens"]
         })
 
@@ -143,8 +140,7 @@ async def get_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
         if not user:
             return not_found("User not found")
 
-        sanitized_user = auth_service.sanitize_user(user)
-        return ok({"user": sanitized_user})
+        return ok({"user": user.to_user_response()})
 
     except Exception as e:
         return server_error("Failed to retrieve profile")
@@ -156,20 +152,11 @@ async def update_profile(
 ):
     """Update user profile"""
     try:
-        update_data = {}
-        if request.first_name is not None:
-            update_data["first_name"] = request.first_name
-        if request.last_name is not None:
-            update_data["last_name"] = request.last_name
-        if request.company_name is not None:
-            update_data["company_name"] = request.company_name
-
-        updated_user = await user_service.update_user(current_user["id"], update_data)
+        updated_user = await user_service.update_user(current_user["id"], request)
         if not updated_user:
             return not_found("User not found")
 
-        sanitized_user = auth_service.sanitize_user(updated_user)
-        return ok({"user": sanitized_user})
+        return ok({"user": updated_user.to_user_response()})
 
     except Exception as e:
         return server_error("Failed to update profile")
@@ -198,13 +185,13 @@ async def change_password(
             return not_found("User not found")
 
         # Check if user has a password (traditional login users)
-        if not user.get("password"):
+        if not user.password:
             return bad_request("This account uses Google OAuth and does not have a password to change")
 
         # Validate current password
         is_valid_current_password = await user_service.validate_password(
             request.current_password, 
-            user["password"]
+            user.password
         )
         if not is_valid_current_password:
             return bad_request("Current password is incorrect")
@@ -274,10 +261,9 @@ async def google_auth_callback(request: Request):
         profile = GoogleProfile(**user_profile)
 
         result = await auth_service.authenticate_with_google(profile)
-        sanitized_user = auth_service.sanitize_user(result["user"])
 
         return ok({
-            "user": sanitized_user,
+            "user": result["user"],
             "tokens": result["tokens"],
             "is_new_user": result["is_new_user"]
         })
@@ -315,10 +301,9 @@ async def google_jwt_auth(request: GoogleJWTRequest):
         )
 
         result = await auth_service.authenticate_with_google(profile)
-        sanitized_user = auth_service.sanitize_user(result["user"])
 
         return created({
-            "user": sanitized_user,
+            "user": result["user"],
             "tokens": result["tokens"],
             "is_new_user": result["is_new_user"]
         }, "Google authentication successful")
