@@ -72,11 +72,11 @@ def server_error(message: str = "Internal server error") -> HTTPException:
 class RegisterData(BaseModel):
     email: EmailStr = Field(..., description="Valid email address")
     password: str = Field(..., min_length=8, description="Password must be at least 8 characters long")
-    firstName: str = Field(..., min_length=2, max_length=100, description="First name must be between 2 and 100 characters")
-    lastName: str = Field(..., min_length=2, max_length=100, description="Last name must be between 2 and 100 characters")
-    companyName: Optional[str] = Field(None, max_length=255, description="Company name must be less than 255 characters")
+    first_name: str = Field(..., min_length=2, max_length=100, description="First name must be between 2 and 100 characters")
+    last_name: str = Field(..., min_length=2, max_length=100, description="Last name must be between 2 and 100 characters")
+    company_name: Optional[str] = Field(None, max_length=255, description="Company name must be less than 255 characters")
 
-    @validator('firstName', 'lastName')
+    @validator('first_name', 'last_name')
     def validate_names(cls, v):
         """Trim whitespace and validate name fields"""
         if v:
@@ -87,7 +87,7 @@ class RegisterData(BaseModel):
                 raise ValueError('Name must be less than 100 characters')
         return v
 
-    @validator('companyName')
+    @validator('company_name')
     def validate_company_name(cls, v):
         """Trim whitespace and validate company name"""
         if v:
@@ -107,6 +107,7 @@ class RegisterData(BaseModel):
         # if not re.search(r'\d', v):
         #     raise ValueError('Password must contain at least one number')
         return v
+    
 
 
 class LoginData(BaseModel):

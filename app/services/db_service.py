@@ -10,20 +10,13 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
-def snake_to_camel(snake_str: str) -> str:
-    """Convert snake_case to camelCase"""
-    components = snake_str.split('_')
-    return components[0] + ''.join(word.capitalize() for word in components[1:])
-
 def transform_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Transform database row from snake_case to camelCase"""
+    """Transform database row - keep snake_case as is"""
     if not row or not isinstance(row, dict):
         return row
     
-    transformed = {}
-    for key, value in row.items():
-        transformed[snake_to_camel(key)] = value
-    return transformed
+    # Return row as-is since we want snake_case
+    return row
 
 class DatabaseService:
     def __init__(self):
@@ -59,7 +52,7 @@ class DatabaseService:
                 else:
                     rows = await connection.fetch(text)
                 
-                # Transform each row from snake_case to camelCase
+                # Transform each row (keeping snake_case)
                 transformed_rows = [transform_row(dict(row)) for row in rows]
                 return {"rows": transformed_rows}
             except Exception as e:
