@@ -9,26 +9,17 @@ from services.user_service import user_service
 from models.user import GoogleProfile
 from middleware.auth_middleware import get_current_user
 from validation.auth_validation import (
-    BadRequestResponse, 
-    CreatedResponse, 
-    NotFoundResponse, 
-    OkResponse, 
-    ServerErrorResponse, 
-    UnauthorizedResponse
+    bad_request,
+    created, 
+    not_found,
+    ok,
+    server_error,
+    unauthorized,
+    RegisterData,
+    LoginData
 )
 
-# Pydantic Models
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str
-    firstName: str
-    lastName: str
-    companyName: Optional[str] = None
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
+# Additional Pydantic Models (beyond those in auth_validation)
 class RefreshTokenRequest(BaseModel):
     refreshToken: str
 
@@ -72,17 +63,14 @@ class GoogleAuthResponse(BaseModel):
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest):
+@router.post("/register", status_code=201)
+async def register(request: RegisterData):
     """Register a new user"""
     try:
         # Validate password strength
         password_validation = auth_service.validate_password(request.password)
         if not password_validation["is_valid"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=password_validation["errors"]
-            )
+            return bad_request(password_validation["errors"], "Password validation failed")
 
         result = await auth_service.register({
             "email": request.email,
@@ -94,24 +82,18 @@ async def register(request: RegisterRequest):
 
         sanitized_user = auth_service.sanitize_user(result["user"])
 
-        return UserResponse(
-            user=sanitized_user,
-            tokens=result["tokens"]
-        )
+        return created({
+            "user": sanitized_user,
+            "tokens": result["tokens"]
+        }, "User registered successfully")
 
     except ValueError as e:
         if str(e) == "User with this email already exists":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+            return bad_request(str(e), "Registration failed")
+        return server_error("Registration failed")
 
-@router.post("/login", response_model=UserResponse)
-async def login(request: LoginRequest):
+@router.post("/login")
+async def login(request: LoginData):
     """Login user"""
     try:
         result = await auth_service.login({
@@ -125,70 +107,49 @@ async def login(request: LoginRequest):
 
         sanitized_user = auth_service.sanitize_user(result["user"])
 
-        return UserResponse(
-            user=sanitized_user,
-            tokens=result["tokens"]
-        )
+        return ok({
+            "user": sanitized_user,
+            "tokens": result["tokens"]
+        })
 
     except ValueError as e:
         if str(e) in ["Invalid email or password", "Account is deactivated. Please contact support."]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(e)
-            )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+            return unauthorized(str(e))
+        return server_error("Login failed")
 
-@router.post("/refresh-token", response_model=UserResponse)
+@router.post("/refresh-token")
 async def refresh_token(request: RefreshTokenRequest):
     """Refresh access token"""
     try:
         if not request.refreshToken:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Refresh token is required"
-            )
+            return bad_request("Refresh token is required")
 
         result = await auth_service.refresh_token(request.refreshToken)
         sanitized_user = auth_service.sanitize_user(result["user"])
 
-        return UserResponse(
-            user=sanitized_user,
-            tokens=result["tokens"]
-        )
+        return ok({
+            "user": sanitized_user,
+            "tokens": result["tokens"]
+        })
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
-        )
+        return unauthorized(str(e))
 
-@router.get("/profile", response_model=ProfileResponse)
+@router.get("/profile")
 async def get_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get user profile"""
     try:
         user = await user_service.find_by_id(current_user["id"])
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+            return not_found("User not found")
 
         sanitized_user = auth_service.sanitize_user(user)
+        return ok({"user": sanitized_user})
 
-        return ProfileResponse(user=sanitized_user)
-
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        return server_error("Failed to retrieve profile")
 
-@router.put("/profile", response_model=ProfileResponse)
+@router.put("/profile")
 async def update_profile(
     request: UpdateProfileRequest, 
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -205,24 +166,15 @@ async def update_profile(
 
         updated_user = await user_service.update_user(current_user["id"], update_data)
         if not updated_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+            return not_found("User not found")
 
         sanitized_user = auth_service.sanitize_user(updated_user)
+        return ok({"user": sanitized_user})
 
-        return ProfileResponse(user=sanitized_user)
-
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        return server_error("Failed to update profile")
 
-@router.post("/change-password", status_code=status.HTTP_201_CREATED)
+@router.post("/change-password", status_code=201)
 async def change_password(
     request: ChangePasswordRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -230,36 +182,24 @@ async def change_password(
     """Change user password"""
     try:
         if not request.currentPassword or not request.newPassword:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password and new password are required"
-            )
+            return bad_request("Current password and new password are required")
 
         # Validate new password strength
         password_validation = auth_service.validate_password(request.newPassword)
         if not password_validation["is_valid"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "errors": password_validation["errors"],
-                    "message": "New password does not meet requirements"
-                }
-            )
+            return bad_request({
+                "errors": password_validation["errors"],
+                "message": "New password does not meet requirements"
+            })
 
         # Get user with password
         user = await user_service.find_by_id(current_user["id"])
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+            return not_found("User not found")
 
         # Check if user has a password (traditional login users)
         if not user.get("password"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This account uses Google OAuth and does not have a password to change"
-            )
+            return bad_request("This account uses Google OAuth and does not have a password to change")
 
         # Validate current password
         is_valid_current_password = await user_service.validate_password(
@@ -267,33 +207,22 @@ async def change_password(
             user["password"]
         )
         if not is_valid_current_password:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect"
-            )
+            return bad_request("Current password is incorrect")
 
         # Update password
         await user_service.update_password(current_user["id"], request.newPassword)
 
-        return {"message": "Password changed successfully"}
+        return created(message="Password changed successfully")
 
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        return server_error("Failed to change password")
 
-@router.post("/forgot-password", status_code=status.HTTP_201_CREATED)
+@router.post("/forgot-password", status_code=201)
 async def forgot_password(request: ForgotPasswordRequest):
     """Request password reset"""
     try:
         if not request.email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is required"
-            )
+            return bad_request("Email is required")
 
         # Always return success for security (don't reveal if email exists)
         try:
@@ -303,48 +232,34 @@ async def forgot_password(request: ForgotPasswordRequest):
             # Silently ignore errors for security
             pass
 
-        return {
-            "message": "If an account with that email exists, a password reset link has been sent."
-        }
+        return created(message="If an account with that email exists, a password reset link has been sent.")
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        return server_error("Failed to process password reset request")
 
-@router.post("/reset-password", response_model=PasswordResetResponse)
+@router.post("/reset-password")
 async def reset_password(request: ResetPasswordRequest):
     """Reset password with token"""
     try:
         if not request.token or not request.newPassword:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Token and new password are required"
-            )
+            return bad_request("Token and new password are required")
 
         # Validate password strength
         password_validation = auth_service.validate_password(request.newPassword)
         if not password_validation["is_valid"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password does not meet requirements"
-            )
+            return bad_request("Password does not meet requirements")
 
         await auth_service.reset_password(request.token, request.newPassword)
 
-        return PasswordResetResponse(
-            success=True,
-            message="Password reset successfully"
-        )
+        return ok({
+            "success": True,
+            "message": "Password reset successfully"
+        })
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        return bad_request(str(e))
 
-@router.get("/google/callback", response_model=GoogleAuthResponse)
+@router.get("/google/callback")
 async def google_auth_callback(request: Request):
     """Google OAuth callback"""
     try:
@@ -353,10 +268,7 @@ async def google_auth_callback(request: Request):
         user_profile = getattr(request.state, 'user', None)
         
         if not user_profile:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
+            return unauthorized("User not found")
 
         # Convert to GoogleProfile format
         profile = GoogleProfile(**user_profile)
@@ -364,28 +276,22 @@ async def google_auth_callback(request: Request):
         result = await auth_service.authenticate_with_google(profile)
         sanitized_user = auth_service.sanitize_user(result["user"])
 
-        return GoogleAuthResponse(
-            user=sanitized_user,
-            tokens=result["tokens"],
-            isNewUser=result["isNewUser"]
-        )
+        return ok({
+            "user": sanitized_user,
+            "tokens": result["tokens"],
+            "isNewUser": result["isNewUser"]
+        })
 
     except Exception as e:
         print(f"Google auth callback error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Google authentication failed"
-        )
+        return unauthorized("Google authentication failed")
 
-@router.post("/google/jwt", response_model=GoogleAuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/google/jwt", status_code=201)
 async def google_jwt_auth(request: GoogleJWTRequest):
     """Google JWT authentication"""
     try:
         if not request.credential:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Google JWT credential is required"
-            )
+            return bad_request("Google JWT credential is required")
 
         # Decode the JWT token to get user info
         try:
@@ -394,10 +300,7 @@ async def google_jwt_auth(request: GoogleJWTRequest):
             payload_encoded += '=' * (4 - len(payload_encoded) % 4)
             payload = json.loads(base64.b64decode(payload_encoded).decode())
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid JWT token format"
-            )
+            return bad_request("Invalid JWT token format")
 
         # Create a profile object similar to the Google Profile interface
         profile = GoogleProfile(
@@ -414,20 +317,15 @@ async def google_jwt_auth(request: GoogleJWTRequest):
         result = await auth_service.authenticate_with_google(profile)
         sanitized_user = auth_service.sanitize_user(result["user"])
 
-        return GoogleAuthResponse(
-            user=sanitized_user,
-            tokens=result["tokens"],
-            isNewUser=result["isNewUser"]
-        )
+        return created({
+            "user": sanitized_user,
+            "tokens": result["tokens"],
+            "isNewUser": result["isNewUser"]
+        }, "Google authentication successful")
 
-    except HTTPException:
-        raise
     except Exception as e:
         print(f"Google JWT auth error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e) or "Google authentication failed"
-        )
+        return server_error(str(e) or "Google authentication failed")
 
 # Export the router to be included in the main app
 auth_router = router
