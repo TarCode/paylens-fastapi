@@ -127,8 +127,13 @@ class TestUserService:
     @pytest.mark.asyncio
     async def test_create_user_google_oauth(self, user_service, mock_db_service, sample_create_user_data_google, sample_db_user_data):
         """Test user creation for Google OAuth."""
+        # Create modified database data with Google ID
+        google_db_data = sample_db_user_data.copy()
+        google_db_data["google_id"] = sample_create_user_data_google.google_id
+        google_db_data["password"] = None
+        
         # Mock database service
-        mock_db_service.query.return_value = {"rows": [sample_db_user_data]}
+        mock_db_service.query.return_value = {"rows": [google_db_data]}
         
         with patch('services.user_service.db_service', mock_db_service):
             result = await user_service.create_user(sample_create_user_data_google)

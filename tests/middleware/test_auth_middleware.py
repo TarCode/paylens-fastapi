@@ -341,14 +341,12 @@ class TestAuthMiddleware:
     @pytest.mark.asyncio
     async def test_authenticate_and_ensure_user_none_token(self, auth_middleware):
         """Test authentication with None token."""
-        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=None)
-        
         with pytest.raises(HTTPException) as exc_info:
-            await auth_middleware.authenticate_and_ensure_user(credentials)
+            await auth_middleware.authenticate_and_ensure_user(None)
         
         exception = exc_info.value
         assert exception.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "Invalid or expired token" in exception.detail["error"]["message"]
+        assert "Access token is required" in exception.detail["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_get_current_user_exception_handling(self, auth_middleware):

@@ -90,10 +90,12 @@ class RegisterData(BaseModel):
     @validator('company_name')
     def validate_company_name(cls, v):
         """Trim whitespace and validate company name"""
-        if v:
+        if v is not None:
             v = v.strip()
             if len(v) > 255:
                 raise ValueError('Company name must be less than 255 characters')
+            if len(v) == 0:
+                return None
         return v
 
     @validator('password')
@@ -112,13 +114,13 @@ class RegisterData(BaseModel):
 
 class LoginData(BaseModel):
     email: EmailStr = Field(..., description="Valid email address")
-    password: str = Field(..., min_length=1, description="Password is required")
+    password: str = Field(..., min_length=6, description="Password must be at least 6 characters long")
 
     @validator('password')
     def password_not_empty(cls, v):
-        """Ensure password is not empty"""
+        """Ensure password is not empty or whitespace only"""
         if not v or not v.strip():
-            raise ValueError('Password is required')
+            raise ValueError('Password cannot be empty or whitespace only')
         return v
 
 

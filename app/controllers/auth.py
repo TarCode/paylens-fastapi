@@ -129,6 +129,9 @@ async def refresh_token(request: RefreshTokenRequest):
             "tokens": result["tokens"]
         })
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
+        raise
     except Exception as e:
         return unauthorized(str(e))
 
@@ -243,6 +246,9 @@ async def reset_password(request: ResetPasswordRequest):
             "message": "Password reset successfully"
         })
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
+        raise
     except Exception as e:
         return bad_request(str(e))
 
@@ -308,6 +314,9 @@ async def google_jwt_auth(request: GoogleJWTRequest):
             "is_new_user": result["is_new_user"]
         }, "Google authentication successful")
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
+        raise
     except Exception as e:
         print(f"Google JWT auth error: {e}")
         return server_error(str(e) or "Google authentication failed")

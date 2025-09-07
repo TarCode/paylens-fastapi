@@ -379,14 +379,26 @@ class AuthService:
             time_str = "7d"
 
         if time_str.endswith('d'):
-            days = int(time_str[:-1])
-            exp_time = now + timedelta(days=days)
+            try:
+                days = int(time_str[:-1])
+                exp_time = now + timedelta(days=days)
+            except ValueError:
+                # Default to 7 days if format is not recognized
+                exp_time = now + timedelta(days=7)
         elif time_str.endswith('h'):
-            hours = int(time_str[:-1])
-            exp_time = now + timedelta(hours=hours)
+            try:
+                hours = int(time_str[:-1])
+                exp_time = now + timedelta(hours=hours)
+            except ValueError:
+                # Default to 7 days if format is not recognized
+                exp_time = now + timedelta(days=7)
         elif time_str.endswith('m'):
-            minutes = int(time_str[:-1])
-            exp_time = now + timedelta(minutes=minutes)
+            try:
+                minutes = int(time_str[:-1])
+                exp_time = now + timedelta(minutes=minutes)
+            except ValueError:
+                # Default to 7 days if format is not recognized
+                exp_time = now + timedelta(days=7)
         else:
             # Default to 7 days if format is not recognized
             exp_time = now + timedelta(days=7)

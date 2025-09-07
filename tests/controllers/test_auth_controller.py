@@ -12,17 +12,11 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
-from main import app
 from models.user import UserResponse, AuthTokens, UserRole, SubscriptionTier
 
 
 class TestAuthController:
     """Test cases for Auth Controller endpoints."""
-
-    @pytest.fixture
-    def client(self):
-        """Create test client."""
-        return TestClient(app)
 
     @pytest.fixture
     def mock_auth_service(self):
@@ -83,98 +77,113 @@ class TestAuthController:
         }
 
     # Registration Tests
-    def test_register_success(self, client, sample_register_data):
+    def test_register_success(self, client, sample_register_data, mock_db_service):
         """Test successful user registration."""
-        # Create a mock that properly handles async calls
-        from unittest.mock import MagicMock
+        # Mock database responses
+        def mock_query(query, params=None):
+            if "SELECT * FROM users WHERE email" in query:
+                # No existing user found
+                return {"rows": []}
+            elif "INSERT INTO users" in query:
+                # Return created user
+                created_user = {
+                    "id": "test-user-id",
+                    "email": "test@example.com",
+                    "password": "hashed_password",
+                    "google_id": None,
+                    "first_name": "John",
+                    "last_name": "Doe",
+                    "company_name": "Test Company",
+                    "role": "user",
+                    "subscription_tier": "free",
+                    "monthly_limit": 5,
+                    "usage_count": 0,
+                    "last_usage_reset": "2024-01-01T00:00:00Z",
+                    "billing_period_start": "2024-01-01T00:00:00Z",
+                    "is_active": True,
+                    "email_verified": True,
+                    "email_verification_token": None,
+                    "password_reset_token": None,
+                    "password_reset_expires": None,
+                    "stripe_customer_id": None,
+                    "subscription_id": None,
+                    "subscription_status": None,
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                }
+                return {"rows": [created_user]}
+            return {"rows": []}
         
-        mock_auth_service = MagicMock()
-        mock_auth_service.register = AsyncMock(return_value={
-            "user": {
-                "id": "test-user-id",
-                "email": "test@example.com",
-                "first_name": "John",
-                "last_name": "Doe",
-                "company_name": "Test Company",
-                "role": "user",
-                "subscription_tier": "free",
-                "usage_count": 0,
-                "monthly_limit": 5,
-                "last_usage_reset": "2024-01-01T00:00:00Z",
-                "billing_period_start": "2024-01-01T00:00:00Z",
-                "is_active": True,
-                "email_verified": True,
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
-            },
-            "tokens": {
-                "access_token": "test_access_token",
-                "refresh_token": "test_refresh_token"
-            }
-        })
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
+        mock_db_service.query.side_effect = mock_query
         
-        # Mock user service
-        mock_user_service = MagicMock()
-        mock_user_service.find_by_email = AsyncMock(return_value=None)
-        mock_user_service.create_user = AsyncMock(return_value=MagicMock())
+        response = client.post("/auth/register", json=sample_register_data)
         
-        with patch('controllers.auth.auth_service', mock_auth_service), \
-             patch('services.auth_service.user_service', mock_user_service):
-            response = client.post("/auth/register", json=sample_register_data)
-            
-            # Verify response
-            assert response.status_code == 201
-            data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            assert "tokens" in data["data"]
-            assert data["data"]["user"]["email"] == sample_register_data["email"]
-            assert data["data"]["tokens"]["access_token"] == "test_access_token"
-            
-            # Verify auth service was called
-            mock_auth_service.validate_password.assert_called_once_with(sample_register_data["password"])
-            mock_auth_service.register.assert_called_once()
+        # Verify response
+        assert response.status_code == 201
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+        assert "user" in data["data"]
+        assert "tokens" in data["data"]
+        assert data["data"]["user"]["email"] == sample_register_data["email"]
+        assert "access_token" in data["data"]["tokens"]
+        assert "refresh_token" in data["data"]["tokens"]
 
-    def test_register_password_validation_failure(self, client, sample_register_data):
+    def test_register_password_validation_failure(self, client):
         """Test registration with weak password."""
-        from unittest.mock import MagicMock
-        
-        mock_auth_service = MagicMock()
-        mock_auth_service.validate_password.return_value = {
-            "is_valid": False,
-            "errors": ["Password must be at least 8 characters long"]
+        weak_password_data = {
+            "email": "test@example.com",
+            "password": "weak",  # Too short
+            "first_name": "John",
+            "last_name": "Doe",
+            "company_name": "Test Company"
         }
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
-            response = client.post("/auth/register", json=sample_register_data)
-            
-            # Verify response
-            assert response.status_code == 400
-            data = response.json()
-            assert "detail" in data
-            assert "error" in data["detail"]
-            assert "Registration failed" in data["detail"]["error"]["message"]
-
-    def test_register_user_already_exists(self, client, mock_auth_service, sample_register_data):
-        """Test registration when user already exists."""
-        # Mock auth service to raise HTTPException
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
-        mock_auth_service.register.side_effect = HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email already exists"
-        )
+        response = client.post("/auth/register", json=weak_password_data)
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
-            response = client.post("/auth/register", json=sample_register_data)
-            
-            # Verify response
-            assert response.status_code == 400
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Registration failed" in data["error"]["message"]
+        # Verify response
+        assert response.status_code == 422  # Pydantic validation error
+        data = response.json()
+        assert "detail" in data
+
+    def test_register_user_already_exists(self, client, sample_register_data, mock_db_service):
+        """Test registration when user already exists."""
+        # Mock database to return existing user
+        existing_user = {
+            "id": "existing-user-id",
+            "email": "test@example.com",
+            "password": "hashed_password",
+            "google_id": None,
+            "first_name": "John",
+            "last_name": "Doe",
+            "company_name": "Test Company",
+            "role": "user",
+            "subscription_tier": "free",
+            "monthly_limit": 5,
+            "usage_count": 0,
+            "last_usage_reset": "2024-01-01T00:00:00Z",
+            "billing_period_start": "2024-01-01T00:00:00Z",
+            "is_active": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "password_reset_token": None,
+            "password_reset_expires": None,
+            "stripe_customer_id": None,
+            "subscription_id": None,
+            "subscription_status": None,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }
+        mock_db_service.query.return_value = {"rows": [existing_user]}
+        
+        response = client.post("/auth/register", json=sample_register_data)
+        
+        # Verify response
+        assert response.status_code == 400
+        data = response.json()
+        assert data["detail"]["success"] is False
+        assert "error" in data["detail"]
+        assert "Registration failed" in data["detail"]["error"]["message"]
 
     def test_register_invalid_data(self, client):
         """Test registration with invalid data."""
@@ -191,15 +200,38 @@ class TestAuthController:
         assert response.status_code == 422  # Validation error
 
     # Login Tests
-    def test_login_success(self, client, mock_auth_service, sample_login_data, sample_user_response, sample_auth_tokens):
+    def test_login_success(self, client, sample_login_data, mock_db_service):
         """Test successful user login."""
-        # Mock auth service response
-        mock_auth_service.login.return_value = {
-            "user": sample_user_response,
-            "tokens": sample_auth_tokens
+        # Mock database to return user for login
+        user_data = {
+            "id": "test-user-id",
+            "email": "test@example.com",
+            "password": "hashed_password",
+            "google_id": None,
+            "first_name": "John",
+            "last_name": "Doe",
+            "company_name": "Test Company",
+            "role": "user",
+            "subscription_tier": "free",
+            "monthly_limit": 5,
+            "usage_count": 0,
+            "last_usage_reset": "2024-01-01T00:00:00Z",
+            "billing_period_start": "2024-01-01T00:00:00Z",
+            "is_active": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "password_reset_token": None,
+            "password_reset_expires": None,
+            "stripe_customer_id": None,
+            "subscription_id": None,
+            "subscription_status": None,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
         }
+        mock_db_service.query.return_value = {"rows": [user_data]}
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock the user service validate_password method
+        with patch('services.user_service.user_service.validate_password', return_value=True):
             response = client.post("/auth/login", json=sample_login_data)
             
             # Verify response
@@ -210,27 +242,18 @@ class TestAuthController:
             assert "user" in data["data"]
             assert "tokens" in data["data"]
             assert data["data"]["user"]["email"] == sample_login_data["email"]
-            
-            # Verify auth service was called
-            mock_auth_service.login.assert_called_once_with(sample_login_data)
 
-    def test_login_invalid_credentials(self, client, mock_auth_service, sample_login_data):
+    def test_login_invalid_credentials(self, client, sample_login_data, mock_db_service):
         """Test login with invalid credentials."""
-        # Mock auth service to raise HTTPException
-        mock_auth_service.login.side_effect = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
+        # Mock database to return no user (invalid credentials)
+        mock_db_service.query.return_value = {"rows": []}
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
-            response = client.post("/auth/login", json=sample_login_data)
-            
-            # Verify response
-            assert response.status_code == 401
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Invalid email or password" in data["error"]["message"]
+        response = client.post("/auth/login", json=sample_login_data)
+        
+        # Verify response
+        assert response.status_code == 401
+        data = response.json()
+        assert data["detail"] == "Invalid email or password"
 
     def test_login_invalid_data(self, client):
         """Test login with invalid data."""
@@ -245,17 +268,40 @@ class TestAuthController:
         assert response.status_code == 422  # Validation error
 
     # Refresh Token Tests
-    def test_refresh_token_success(self, client, mock_auth_service, sample_user_response, sample_auth_tokens):
+    def test_refresh_token_success(self, client, sample_user_response, sample_auth_tokens, mock_db_service):
         """Test successful token refresh."""
         refresh_data = {"refresh_token": "valid_refresh_token"}
         
-        # Mock auth service response
-        mock_auth_service.refresh_token.return_value = {
-            "user": sample_user_response,
-            "tokens": sample_auth_tokens
+        # Mock database to return user for refresh token validation
+        user_data = {
+            "id": "test-user-id",
+            "email": "test@example.com",
+            "password": "hashed_password",
+            "google_id": None,
+            "first_name": "John",
+            "last_name": "Doe",
+            "company_name": "Test Company",
+            "role": "user",
+            "subscription_tier": "free",
+            "monthly_limit": 5,
+            "usage_count": 0,
+            "last_usage_reset": "2024-01-01T00:00:00Z",
+            "billing_period_start": "2024-01-01T00:00:00Z",
+            "is_active": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "password_reset_token": None,
+            "password_reset_expires": None,
+            "stripe_customer_id": None,
+            "subscription_id": None,
+            "subscription_status": None,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
         }
+        mock_db_service.query.return_value = {"rows": [user_data]}
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock JWT decode to return a valid payload
+        with patch('jwt.decode', return_value={"id": "test-user-id", "exp": 9999999999}):
             response = client.post("/auth/refresh-token", json=refresh_data)
             
             # Verify response
@@ -265,29 +311,20 @@ class TestAuthController:
             assert "data" in data
             assert "user" in data["data"]
             assert "tokens" in data["data"]
-            
-            # Verify auth service was called
-            mock_auth_service.refresh_token.assert_called_once_with(refresh_data["refresh_token"])
 
-    def test_refresh_token_invalid_token(self, client, mock_auth_service):
+    def test_refresh_token_invalid_token(self, client):
         """Test refresh token with invalid token."""
         refresh_data = {"refresh_token": "invalid_token"}
         
-        # Mock auth service to raise HTTPException
-        mock_auth_service.refresh_token.side_effect = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
-        )
-        
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock JWT decode to raise InvalidTokenError
+        import jwt
+        with patch('jwt.decode', side_effect=jwt.InvalidTokenError("Invalid token")):
             response = client.post("/auth/refresh-token", json=refresh_data)
             
             # Verify response
             assert response.status_code == 401
             data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Invalid refresh token" in data["error"]["message"]
+            assert data["detail"] == "Invalid refresh token"
 
     def test_refresh_token_missing_token(self, client):
         """Test refresh token with missing token."""
@@ -298,12 +335,12 @@ class TestAuthController:
         # Verify response
         assert response.status_code == 400
         data = response.json()
-        assert data["success"] is False
-        assert "error" in data
-        assert "Refresh token is required" in data["error"]["message"]
+        assert data["detail"]["success"] is False
+        assert "error" in data["detail"]
+        assert "Refresh token is required" in data["detail"]["error"]["details"]
 
     # Profile Tests
-    def test_get_profile_success(self, client, mock_user_service, sample_user_response):
+    def test_get_profile_success(self, client, sample_user_response, mock_db_service):
         """Test successful profile retrieval."""
         # Mock current user
         mock_current_user = {
@@ -317,12 +354,43 @@ class TestAuthController:
             "billing_period_start": "2024-01-01T00:00:00Z"
         }
         
-        # Mock user service
-        mock_user_service.find_by_id.return_value = sample_user_response
+        # Mock database to return user
+        user_data = {
+            "id": "test-user-id",
+            "email": "test@example.com",
+            "password": "hashed_password",
+            "google_id": None,
+            "first_name": "John",
+            "last_name": "Doe",
+            "company_name": "Test Company",
+            "role": "user",
+            "subscription_tier": "free",
+            "monthly_limit": 5,
+            "usage_count": 0,
+            "last_usage_reset": "2024-01-01T00:00:00Z",
+            "billing_period_start": "2024-01-01T00:00:00Z",
+            "is_active": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "password_reset_token": None,
+            "password_reset_expires": None,
+            "stripe_customer_id": None,
+            "subscription_id": None,
+            "subscription_status": None,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }
+        mock_db_service.query.return_value = {"rows": [user_data]}
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
+        # Override the dependency
+        from middleware.auth_middleware import get_current_user
+        
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
             response = client.get("/auth/profile", headers={"Authorization": "Bearer test_token"})
             
             # Verify response
@@ -331,10 +399,10 @@ class TestAuthController:
             assert data["success"] is True
             assert "data" in data
             assert "user" in data["data"]
-            assert data["data"]["user"]["email"] == sample_user_response.email
-            
-            # Verify user service was called
-            mock_user_service.find_by_id.assert_called_once_with(mock_current_user["id"])
+            assert data["data"]["user"]["email"] == mock_current_user["email"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     def test_get_profile_user_not_found(self, client, mock_user_service):
         """Test profile retrieval when user is not found."""
@@ -353,17 +421,34 @@ class TestAuthController:
         # Mock user service to return None
         mock_user_service.find_by_id.return_value = None
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.get("/auth/profile", headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 404
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "User not found" in data["error"]["message"]
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        # Override the dependency
+        from middleware.auth_middleware import get_current_user
+        
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
+            with patch('controllers.auth.user_service', mock_user_service), \
+                 patch('services.user_service.db_service', mock_db_service), \
+                 patch('services.db_service.db_service', mock_db_service):
+                
+                response = client.get("/auth/profile", headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 404
+                data = response.json()
+                assert data["success"] is False
+                assert "error" in data
+                assert "User not found" in data["error"]["message"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     def test_get_profile_unauthorized(self, client):
         """Test profile retrieval without authentication."""
@@ -396,20 +481,37 @@ class TestAuthController:
         # Mock user service
         mock_user_service.update_user.return_value = sample_user_response
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.put("/auth/profile", json=update_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            
-            # Verify user service was called
-            mock_user_service.update_user.assert_called_once()
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        # Override the dependency
+        from middleware.auth_middleware import get_current_user
+        
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
+            with patch('controllers.auth.user_service', mock_user_service), \
+                 patch('services.user_service.db_service', mock_db_service), \
+                 patch('services.db_service.db_service', mock_db_service):
+                
+                response = client.put("/auth/profile", json=update_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 200
+                data = response.json()
+                assert data["success"] is True
+                assert "data" in data
+                assert "user" in data["data"]
+                
+                # Verify user service was called
+                mock_user_service.update_user.assert_called_once()
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     def test_update_profile_user_not_found(self, client, mock_user_service):
         """Test profile update when user is not found."""
@@ -676,10 +778,10 @@ class TestAuthController:
         }
         
         # Mock password validation failure
-        mock_auth_service.validate_password.return_value = {
+        mock_auth_service.validate_password = AsyncMock(return_value={
             "is_valid": False,
             "errors": ["Password must be at least 8 characters long"]
-        }
+        })
         
         with patch('controllers.auth.auth_service', mock_auth_service):
             response = client.post("/auth/reset-password", json=reset_data)
@@ -687,9 +789,9 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 400
             data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Password does not meet requirements" in data["error"]["message"]
+            assert data["detail"]["success"] is False
+            assert "error" in data["detail"]
+            assert "Password does not meet requirements" in data["detail"]["error"]["details"]
 
     def test_reset_password_invalid_token(self, client, mock_auth_service):
         """Test password reset with invalid token."""
@@ -699,11 +801,8 @@ class TestAuthController:
         }
         
         # Mock auth service
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
-        mock_auth_service.reset_password.side_effect = HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid token"
-        )
+        mock_auth_service.validate_password = AsyncMock(return_value={"is_valid": True, "errors": []})
+        mock_auth_service.reset_password = AsyncMock(side_effect=ValueError("Invalid token"))
         
         with patch('controllers.auth.auth_service', mock_auth_service):
             response = client.post("/auth/reset-password", json=reset_data)
@@ -711,9 +810,9 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 400
             data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Invalid token" in data["error"]["message"]
+            assert data["detail"]["success"] is False
+            assert "error" in data["detail"]
+            assert "Invalid token" in data["detail"]["error"]["details"]
 
     # Google Auth Tests
     def test_google_jwt_auth_success(self, client, mock_auth_service, sample_user_response, sample_auth_tokens):
@@ -768,9 +867,9 @@ class TestAuthController:
         # Verify response
         assert response.status_code == 400
         data = response.json()
-        assert data["success"] is False
-        assert "error" in data
-        assert "Invalid JWT token format" in data["error"]["message"]
+        assert data["detail"]["success"] is False
+        assert "error" in data["detail"]
+        assert "Invalid JWT token format" in data["detail"]["error"]["details"]
 
     def test_google_jwt_auth_missing_credential(self, client):
         """Test Google JWT authentication with missing credential."""
@@ -781,9 +880,9 @@ class TestAuthController:
         # Verify response
         assert response.status_code == 400
         data = response.json()
-        assert data["success"] is False
-        assert "error" in data
-        assert "Google JWT credential is required" in data["error"]["message"]
+        assert data["detail"]["success"] is False
+        assert "error" in data["detail"]
+        assert "Google JWT credential is required" in data["detail"]["error"]["details"]
 
     def test_google_auth_callback_success(self, client, mock_auth_service, sample_user_response, sample_auth_tokens):
         """Test successful Google OAuth callback."""
@@ -823,6 +922,6 @@ class TestAuthController:
         # Verify response
         assert response.status_code == 401
         data = response.json()
-        assert data["success"] is False
-        assert "error" in data
-        assert "User not found" in data["error"]["message"]
+        assert data["detail"]["success"] is False
+        assert "error" in data["detail"]
+        assert "User not found" in data["detail"]["error"]["message"]

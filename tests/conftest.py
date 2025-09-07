@@ -15,6 +15,7 @@ os.environ["REFRESH_TOKEN_SECRET"] = "test-refresh-secret"
 os.environ["JWT_EXPIRES_IN"] = "1h"
 os.environ["REFRESH_TOKEN_EXPIRES_IN"] = "7d"
 os.environ["BCRYPT_ROUNDS"] = "4"  # Faster for tests
+os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/test_db"
 
 import sys
 import os
@@ -40,7 +41,12 @@ def event_loop():
 def mock_db_service():
     """Mock database service for testing."""
     mock_service = AsyncMock()
-    mock_service.query = AsyncMock()
+    mock_service.query = AsyncMock(return_value={"rows": []})
+    mock_service.fetchrow = AsyncMock(return_value=None)
+    mock_service.execute = AsyncMock(return_value="INSERT 0 1")
+    mock_service.initialize = AsyncMock()
+    mock_service.close = AsyncMock()
+    mock_service.health_check = AsyncMock(return_value=True)
     return mock_service
 
 
@@ -297,3 +303,11 @@ def faker():
     """Faker instance for generating test data."""
     from faker import Faker
     return Faker()
+
+
+@pytest.fixture(autouse=True)
+def mock_database_services(mock_db_service):
+    """Automatically mock database services for all tests."""
+    with patch('services.db_service.db_service', mock_db_service), \
+         patch('services.user_service.db_service', mock_db_service):
+        yield

@@ -686,7 +686,7 @@ class TestUserModels:
         
         # Test that datetime fields are properly encoded
         try:
-            json_data = user_response.model_dump()
+            json_data = user_response.model_dump(mode='json')
             assert isinstance(json_data["last_usage_reset"], str)
             assert isinstance(json_data["billing_period_start"], str)
             assert isinstance(json_data["created_at"], str)
@@ -729,7 +729,7 @@ class TestUserModels:
         
         # Test that datetime fields are properly encoded
         try:
-            json_data = user_internal.model_dump()
+            json_data = user_internal.model_dump(mode='json')
             assert isinstance(json_data["last_usage_reset"], str)
             assert isinstance(json_data["billing_period_start"], str)
             assert isinstance(json_data["created_at"], str)

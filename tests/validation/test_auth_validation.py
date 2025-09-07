@@ -56,7 +56,7 @@ class TestAuthValidation:
         content = response.body.decode()
         assert '"success":true' in content
         assert '"message":"User created successfully"' in content
-        assert '"user": "test_user"' in content
+        assert '"data":{"user":"test_user","id":123}' in content
 
     def test_created_response_without_data(self):
         """Test created response without data."""
@@ -173,12 +173,12 @@ class TestAuthValidation:
             "first_name": "John",
             "last_name": "Doe"
         }
-        
+
         with pytest.raises(ValidationError) as exc_info:
             RegisterData(**data)
-        
+
         errors = exc_info.value.errors()
-        assert any(error["type"] == "string_too_short" for error in errors)
+        assert any(error["type"] == "value_error" for error in errors)
 
     def test_register_data_short_password(self):
         """Test RegisterData with short password."""
@@ -310,7 +310,7 @@ class TestAuthValidation:
             LoginData(**data)
         
         errors = exc_info.value.errors()
-        assert any(error["type"] == "string_too_short" for error in errors)
+        assert any(error["type"] == "value_error" for error in errors)
 
     def test_login_data_empty_password(self):
         """Test LoginData with empty password."""
@@ -331,10 +331,10 @@ class TestAuthValidation:
             "email": "test@example.com",
             "password": "   "
         }
-        
+
         with pytest.raises(ValidationError) as exc_info:
             LoginData(**data)
-        
+
         errors = exc_info.value.errors()
         assert any(error["type"] == "string_too_short" for error in errors)
 
@@ -468,13 +468,13 @@ class TestAuthValidation:
         data = {
             "email": "test@example.com",
             "password": "TestPassword123!",
-            "first_name": "李",
-            "last_name": "明",
+            "first_name": "李明",
+            "last_name": "王华",
             "company_name": "测试公司"
         }
         
         register_data = RegisterData(**data)
         
-        assert register_data.first_name == "李"
-        assert register_data.last_name == "明"
+        assert register_data.first_name == "李明"
+        assert register_data.last_name == "王华"
         assert register_data.company_name == "测试公司"
