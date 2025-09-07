@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 from enum import Enum
@@ -14,6 +14,32 @@ class SubscriptionTier(str, Enum):
     PRO = "pro"
     BUSINESS = "business"
     ENTERPRISE = "enterprise"
+
+# Response model for API endpoints (defined before UserDB)
+class UserResponse(BaseModel):
+    """Sanitized user data for API responses (no sensitive information)"""
+    id: str
+    email: EmailStr
+    firstName: str = Field(..., alias="firstName")
+    lastName: str = Field(..., alias="lastName")
+    companyName: Optional[str] = Field(None, alias="companyName")
+    role: UserRole
+    subscriptionTier: SubscriptionTier = Field(..., alias="subscriptionTier")
+    monthlyLimit: int = Field(..., alias="monthlyLimit")
+    usageCount: int = Field(..., alias="usageCount")
+    lastUsageReset: datetime = Field(..., alias="lastUsageReset")
+    billingPeriodStart: datetime = Field(..., alias="billingPeriodStart")
+    isActive: bool = Field(..., alias="isActive")
+    emailVerified: bool = Field(..., alias="emailVerified")
+    createdAt: datetime = Field(..., alias="createdAt")
+    updatedAt: datetime = Field(..., alias="updatedAt")
+
+    class Config:
+        allow_population_by_field_name = True
+        use_enum_values = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
 
 # Database-specific models (for ORMs like SQLAlchemy)
 class UserDB(SQLModel, table=True):
@@ -46,7 +72,6 @@ class UserDB(SQLModel, table=True):
 
     def to_user_response(self) -> 'UserResponse':
         """Convert UserDB model to UserResponse (sanitized)"""
-        from your_module import UserResponse  # Import your UserResponse model
         
         return UserResponse(
             id=self.id,
