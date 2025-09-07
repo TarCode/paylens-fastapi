@@ -20,26 +20,27 @@ class UserResponse(BaseModel):
     """Sanitized user data for API responses (no sensitive information)"""
     id: str
     email: EmailStr
-    firstName: str = Field(..., alias="firstName")
-    lastName: str = Field(..., alias="lastName")
-    companyName: Optional[str] = Field(None, alias="companyName")
+    first_name: str
+    last_name: str
+    company_name: Optional[str] = None
     role: UserRole
-    subscriptionTier: SubscriptionTier = Field(..., alias="subscriptionTier")
-    monthlyLimit: int = Field(..., alias="monthlyLimit")
-    usageCount: int = Field(..., alias="usageCount")
-    lastUsageReset: datetime = Field(..., alias="lastUsageReset")
-    billingPeriodStart: datetime = Field(..., alias="billingPeriodStart")
-    isActive: bool = Field(..., alias="isActive")
-    emailVerified: bool = Field(..., alias="emailVerified")
-    createdAt: datetime = Field(..., alias="createdAt")
-    updatedAt: datetime = Field(..., alias="updatedAt")
+    subscription_tier: SubscriptionTier
+    monthly_limit: int
+    usage_count: int
+    last_usage_reset: datetime
+    billing_period_start: datetime
+    is_active: bool
+    email_verified: bool
+    created_at: datetime
+    updated_at: datetime
 
-    class Config:
-        allow_population_by_field_name = True
-        use_enum_values = True
-        json_encoders = {
+    model_config = {
+        "populate_by_name": True,
+        "use_enum_values": True,
+        "json_encoders": {
             datetime: lambda v: v.isoformat() if v else None
         }
+    }
 
 # Database-specific models (for ORMs like SQLAlchemy)
 class UserDB(SQLModel, table=True):
@@ -80,19 +81,19 @@ class UserDB(SQLModel, table=True):
         return UserResponse(
             id=self.id,
             email=self.email,
-            firstName=self.first_name,
-            lastName=self.last_name,
-            companyName=self.company_name,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            company_name=self.company_name,
             role=UserRole(self.role),
-            subscriptionTier=SubscriptionTier(self.subscription_tier),
-            monthlyLimit=self.monthly_limit,
-            usageCount=self.usage_count,
-            lastUsageReset=self.last_usage_reset,
-            billingPeriodStart=self.billing_period_start,
-            isActive=self.is_active,
-            emailVerified=self.email_verified,
-            createdAt=self.created_at,
-            updatedAt=self.updated_at
+            subscription_tier=SubscriptionTier(self.subscription_tier),
+            monthly_limit=self.monthly_limit,
+            usage_count=self.usage_count,
+            last_usage_reset=self.last_usage_reset,
+            billing_period_start=self.billing_period_start,
+            is_active=self.is_active,
+            email_verified=self.email_verified,
+            created_at=self.created_at,
+            updated_at=self.updated_at
         )
 
     @property
@@ -134,11 +135,12 @@ class UserDBValidated(SQLModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    class Config:
-        use_enum_values = True
-        json_encoders = {
+    model_config = {
+        "use_enum_values": True,
+        "json_encoders": {
             datetime: lambda v: v.isoformat() if v else None
         }
+    }
 
 # Utility functions for conversion between models
 def userdb_to_validated(user_db: UserDB) -> UserDBValidated:
@@ -201,50 +203,50 @@ class User(BaseModel):
     id: str
     email: str
     password: Optional[str] = None  # Optional for Google OAuth users
-    googleId: Optional[str] = None  # Google OAuth ID
-    firstName: str
-    lastName: str
-    companyName: Optional[str] = None
+    google_id: Optional[str] = None  # Google OAuth ID
+    first_name: str
+    last_name: str
+    company_name: Optional[str] = None
     role: Literal['user', 'admin']
-    subscriptionTier: Literal['free', 'pro', 'business', 'enterprise']
-    monthlyLimit: int
-    usageCount: int
-    lastUsageReset: datetime
-    billingPeriodStart: datetime
-    isActive: bool
-    emailVerified: bool
-    emailVerificationToken: Optional[str] = None
-    passwordResetToken: Optional[str] = None
-    passwordResetExpires: Optional[datetime] = None
-    stripeCustomerId: Optional[str] = None
-    subscriptionId: Optional[str] = None
-    subscriptionStatus: Optional[str] = None
-    createdAt: datetime
-    updatedAt: datetime
+    subscription_tier: Literal['free', 'pro', 'business', 'enterprise']
+    monthly_limit: int
+    usage_count: int
+    last_usage_reset: datetime
+    billing_period_start: datetime
+    is_active: bool
+    email_verified: bool
+    email_verification_token: Optional[str] = None
+    password_reset_token: Optional[str] = None
+    password_reset_expires: Optional[datetime] = None
+    stripe_customer_id: Optional[str] = None
+    subscription_id: Optional[str] = None
+    subscription_status: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class CreateUserData(BaseModel):
     email: str
     password: Optional[str] = None  # Optional for Google OAuth users
-    googleId: Optional[str] = None  # Google OAuth ID
-    firstName: str
-    lastName: str
-    companyName: Optional[str] = None
+    google_id: Optional[str] = None  # Google OAuth ID
+    first_name: str
+    last_name: str
+    company_name: Optional[str] = None
 
 
 class UpdateUserData(BaseModel):
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
-    companyName: Optional[str] = None
-    googleId: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
+    google_id: Optional[str] = None
     role: Optional[Literal['user', 'admin']] = None
-    isActive: Optional[bool] = None
-    emailVerified: Optional[bool] = None
-    subscriptionTier: Optional[Literal['free', 'pro', 'business', 'enterprise']] = None
-    monthlyLimit: Optional[int] = None
-    usageCount: Optional[int] = None
-    lastUsageReset: Optional[datetime] = None
-    billingPeriodStart: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    email_verified: Optional[bool] = None
+    subscription_tier: Optional[Literal['free', 'pro', 'business', 'enterprise']] = None
+    monthly_limit: Optional[int] = None
+    usage_count: Optional[int] = None
+    last_usage_reset: Optional[datetime] = None
+    billing_period_start: Optional[datetime] = None
 
 
 class LoginData(BaseModel):
@@ -253,19 +255,19 @@ class LoginData(BaseModel):
 
 
 class AuthTokens(BaseModel):
-    accessToken: str
-    refreshToken: str
+    access_token: str
+    refresh_token: str
 
 
 class JWTPayload(BaseModel):
     id: str
     email: str
     role: str
-    subscriptionTier: str
-    usageCount: int
-    monthlyLimit: int
-    lastUsageReset: datetime
-    billingPeriodStart: datetime
+    subscription_tier: str
+    usage_count: int
+    monthly_limit: int
+    last_usage_reset: datetime
+    billing_period_start: datetime
 
 
 class GoogleProfile(BaseModel):
