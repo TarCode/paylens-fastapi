@@ -96,6 +96,40 @@ class UserDB(SQLModel, table=True):
             updated_at=self.updated_at
         )
 
+    def to_user_internal(self) -> 'UserInternal':
+        """Convert UserDB model to UserInternal (includes sensitive data)"""
+        
+        # Handle None values for datetime fields
+        last_usage_reset = self.last_usage_reset
+        if last_usage_reset is None:
+            last_usage_reset = datetime.now(timezone.utc)
+        
+        return UserInternal(
+            id=self.id,
+            email=self.email,
+            password=self.password,
+            google_id=self.google_id,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            company_name=self.company_name,
+            role=UserRole(self.role),
+            subscription_tier=SubscriptionTier(self.subscription_tier),
+            monthly_limit=self.monthly_limit,
+            usage_count=self.usage_count,
+            last_usage_reset=last_usage_reset,
+            billing_period_start=self.billing_period_start,
+            is_active=self.is_active,
+            email_verified=self.email_verified,
+            email_verification_token=self.email_verification_token,
+            password_reset_token=self.password_reset_token,
+            password_reset_expires=self.password_reset_expires,
+            stripe_customer_id=self.stripe_customer_id,
+            subscription_id=self.subscription_id,
+            subscription_status=self.subscription_status,
+            created_at=self.created_at,
+            updated_at=self.updated_at
+        )
+
     @property
     def role_enum(self) -> UserRole:
         """Get role as enum"""
@@ -106,109 +140,18 @@ class UserDB(SQLModel, table=True):
         """Get subscription tier as enum"""
         return SubscriptionTier(self.subscription_tier)
 
-# Alternative UserDB model with better validation (non-table version for API operations)
-class UserDBValidated(SQLModel):
-    """User model with proper validation for API operations (not a table)"""
-    id: Optional[str] = None
+# Internal User model for service layer operations (includes sensitive data)
+class UserInternal(BaseModel):
+    """Internal user model for service operations (includes sensitive fields)"""
+    id: str
     email: EmailStr
     password: Optional[str] = None
     google_id: Optional[str] = None
     first_name: str
     last_name: str
     company_name: Optional[str] = None
-    role: UserRole = UserRole.USER
-    subscription_tier: SubscriptionTier = SubscriptionTier.FREE
-    monthly_limit: int = 1000
-    usage_count: int = 0
-    last_usage_reset: Optional[datetime] = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
-    billing_period_start: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    is_active: bool = True
-    email_verified: bool = False
-    email_verification_token: Optional[str] = None
-    password_reset_token: Optional[str] = None
-    password_reset_expires: Optional[datetime] = None
-    stripe_customer_id: Optional[str] = None
-    subscription_id: Optional[str] = None
-    subscription_status: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-    model_config = {
-        "use_enum_values": True,
-        "json_encoders": {
-            datetime: lambda v: v.isoformat() if v else None
-        }
-    }
-
-# Utility functions for conversion between models
-def userdb_to_validated(user_db: UserDB) -> UserDBValidated:
-    """Convert UserDB (table model) to UserDBValidated (validation model)"""
-    return UserDBValidated(
-        id=user_db.id,
-        email=user_db.email,
-        password=user_db.password,
-        google_id=user_db.google_id,
-        first_name=user_db.first_name,
-        last_name=user_db.last_name,
-        company_name=user_db.company_name,
-        role=UserRole(user_db.role),
-        subscription_tier=SubscriptionTier(user_db.subscription_tier),
-        monthly_limit=user_db.monthly_limit,
-        usage_count=user_db.usage_count,
-        last_usage_reset=user_db.last_usage_reset,
-        billing_period_start=user_db.billing_period_start,
-        is_active=user_db.is_active,
-        email_verified=user_db.email_verified,
-        email_verification_token=user_db.email_verification_token,
-        password_reset_token=user_db.password_reset_token,
-        password_reset_expires=user_db.password_reset_expires,
-        stripe_customer_id=user_db.stripe_customer_id,
-        subscription_id=user_db.subscription_id,
-        subscription_status=user_db.subscription_status,
-        created_at=user_db.created_at,
-        updated_at=user_db.updated_at
-    )
-
-def validated_to_userdb(user_validated: UserDBValidated) -> UserDB:
-    """Convert UserDBValidated to UserDB (for database operations)"""
-    return UserDB(
-        id=user_validated.id,
-        email=user_validated.email,
-        password=user_validated.password,
-        google_id=user_validated.google_id,
-        first_name=user_validated.first_name,
-        last_name=user_validated.last_name,
-        company_name=user_validated.company_name,
-        role=user_validated.role.value,
-        subscription_tier=user_validated.subscription_tier.value,
-        monthly_limit=user_validated.monthly_limit,
-        usage_count=user_validated.usage_count,
-        last_usage_reset=user_validated.last_usage_reset,
-        billing_period_start=user_validated.billing_period_start,
-        is_active=user_validated.is_active,
-        email_verified=user_validated.email_verified,
-        email_verification_token=user_validated.email_verification_token,
-        password_reset_token=user_validated.password_reset_token,
-        password_reset_expires=user_validated.password_reset_expires,
-        stripe_customer_id=user_validated.stripe_customer_id,
-        subscription_id=user_validated.subscription_id,
-        subscription_status=user_validated.subscription_status,
-        created_at=user_validated.created_at,
-        updated_at=user_validated.updated_at
-    )
-
-class User(BaseModel):
-    id: str
-    email: str
-    password: Optional[str] = None  # Optional for Google OAuth users
-    google_id: Optional[str] = None  # Google OAuth ID
-    first_name: str
-    last_name: str
-    company_name: Optional[str] = None
-    role: Literal['user', 'admin']
-    subscription_tier: Literal['free', 'pro', 'business', 'enterprise']
+    role: UserRole
+    subscription_tier: SubscriptionTier
     monthly_limit: int
     usage_count: int
     last_usage_reset: datetime
@@ -223,6 +166,34 @@ class User(BaseModel):
     subscription_status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {
+        "populate_by_name": True,
+        "use_enum_values": True,
+        "json_encoders": {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    }
+
+    def to_user_response(self) -> 'UserResponse':
+        """Convert UserInternal to UserResponse (sanitized)"""
+        return UserResponse(
+            id=self.id,
+            email=self.email,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            company_name=self.company_name,
+            role=self.role,
+            subscription_tier=self.subscription_tier,
+            monthly_limit=self.monthly_limit,
+            usage_count=self.usage_count,
+            last_usage_reset=self.last_usage_reset,
+            billing_period_start=self.billing_period_start,
+            is_active=self.is_active,
+            email_verified=self.email_verified,
+            created_at=self.created_at,
+            updated_at=self.updated_at
+        )
 
 
 class CreateUserData(BaseModel):
@@ -279,3 +250,33 @@ class GoogleProfile(BaseModel):
     family_name: str
     picture: str
     locale: str
+
+
+# Utility functions for model conversion
+def dict_to_userdb(data: dict) -> UserDB:
+    """Convert dictionary (from database) to UserDB model"""
+    return UserDB(
+        id=data.get('id'),
+        email=data.get('email'),
+        password=data.get('password'),
+        google_id=data.get('google_id'),
+        first_name=data.get('first_name'),
+        last_name=data.get('last_name'),
+        company_name=data.get('company_name'),
+        role=data.get('role', UserRole.USER.value),
+        subscription_tier=data.get('subscription_tier', SubscriptionTier.FREE.value),
+        monthly_limit=data.get('monthly_limit', 1000),
+        usage_count=data.get('usage_count', 0),
+        last_usage_reset=data.get('last_usage_reset'),
+        billing_period_start=data.get('billing_period_start'),
+        is_active=data.get('is_active', True),
+        email_verified=data.get('email_verified', False),
+        email_verification_token=data.get('email_verification_token'),
+        password_reset_token=data.get('password_reset_token'),
+        password_reset_expires=data.get('password_reset_expires'),
+        stripe_customer_id=data.get('stripe_customer_id'),
+        subscription_id=data.get('subscription_id'),
+        subscription_status=data.get('subscription_status'),
+        created_at=data.get('created_at'),
+        updated_at=data.get('updated_at')
+    )
