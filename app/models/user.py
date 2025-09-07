@@ -1,7 +1,7 @@
 from pyexpat import ParserCreate
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 # Enums for better type safety
@@ -28,8 +28,8 @@ class User(BaseModel):
     subscription_tier: SubscriptionTier = Field(SubscriptionTier.FREE, alias="subscriptionTier")
     monthly_limit: int = Field(default=1000, alias="monthlyLimit")
     usage_count: int = Field(default=0, alias="usageCount")
-    last_usage_reset: datetime = Field(default_factory=datetime.now(datetime.timezone.utc), alias="lastUsageReset")
-    billing_period_start: datetime = Field(default_factory=datetime.now(datetime.timezone.utc), alias="billingPeriodStart")
+    last_usage_reset: datetime = Field(default_factory=datetime.now(timezone.utc), alias="lastUsageReset")
+    billing_period_start: datetime = Field(default_factory=datetime.now(timezone.utc), alias="billingPeriodStart")
     is_active: bool = Field(default=True, alias="isActive")
     email_verified: bool = Field(default=False, alias="emailVerified")
     email_verification_token: Optional[str] = Field(None, alias="emailVerificationToken")
@@ -38,8 +38,8 @@ class User(BaseModel):
     stripe_customer_id: Optional[str] = Field(None, alias="stripeCustomerId")
     subscription_id: Optional[str] = Field(None, alias="subscriptionId")
     subscription_status: Optional[str] = Field(None, alias="subscriptionStatus")
-    created_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc), alias="createdAt")
-    updated_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc), alias="updatedAt")
+    created_at: datetime = Field(default_factory=datetime.now(timezone.utc), alias="createdAt")
+    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc), alias="updatedAt")
 
     class Config:
         allow_population_by_field_name = True
@@ -145,7 +145,7 @@ class UserDB(BaseModel):
     """User model for database operations (without sensitive data)"""
     id: Optional[str] = None
     email: EmailStr
-    password_hash: Optional[str] = None  # Hashed password
+    password: Optional[str] = None  # Hashed password
     google_id: Optional[str] = None
     first_name: str
     last_name: str
@@ -154,8 +154,8 @@ class UserDB(BaseModel):
     subscription_tier: SubscriptionTier = SubscriptionTier.FREE
     monthly_limit: int = 1000
     usage_count: int = 0
-    last_usage_reset: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
-    billing_period_start: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
+    last_usage_reset: datetime = Field(default_factory=datetime.now(timezone.utc))
+    billing_period_start: datetime = Field(default_factory=datetime.now(timezone.utc))
     is_active: bool = True
     email_verified: bool = False
     email_verification_token: Optional[str] = None
@@ -164,8 +164,8 @@ class UserDB(BaseModel):
     stripe_customer_id: Optional[str] = None
     subscription_id: Optional[str] = None
     subscription_status: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
-    updated_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc))
 
     class Config:
         use_enum_values = True
@@ -217,11 +217,11 @@ def create_jwt_payload(user: UserDB) -> JWTPayload:
         billingPeriodStart=user.billing_period_start
     )
 
-def create_user_from_data(user_data: CreateUserData, password_hash: Optional[str] = None) -> ParserCreate:
+def create_user_from_data(user_data: CreateUserData, password: Optional[str] = None) -> ParserCreate:
     """Convert CreateUserData to UserCreate model"""
     return ParserCreate(
         email=user_data.email,
-        password_hash=password_hash,
+        password=password,
         google_id=user_data.google_id,
         first_name=user_data.first_name,
         last_name=user_data.last_name,

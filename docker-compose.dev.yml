@@ -1,6 +1,8 @@
 version: "3.10"
 services:
   fastapi_app:
+    depends_on:
+      - db
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,4 +12,13 @@ services:
     volumes:
       - ./app:/app
     environment:
-      - ENV=production
+      - ENV=${ENV}
+      - DATABASE_URL=${DATABASE_URL_DOCKER}
+  db:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
