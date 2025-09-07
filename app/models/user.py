@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, func
 from pydantic import EmailStr, BaseModel
 from typing import Optional, Literal
 from datetime import datetime, timezone
@@ -57,8 +57,12 @@ class UserDB(SQLModel, table=True):
     subscription_tier: str = Field(default=SubscriptionTier.FREE.value)  # Store as string
     monthly_limit: int = Field(default=1000)
     usage_count: int = Field(default=0)
-    last_usage_reset: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    billing_period_start: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_usage_reset: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    billing_period_start: datetime = Field(
+        sa_column_kwargs={"server_default": func.now()}  # <-- DB default
+    )
     is_active: bool = Field(default=True)
     email_verified: bool = Field(default=False)
     email_verification_token: Optional[str] = Field(default=None)
@@ -115,7 +119,9 @@ class UserDBValidated(SQLModel):
     subscription_tier: SubscriptionTier = SubscriptionTier.FREE
     monthly_limit: int = 1000
     usage_count: int = 0
-    last_usage_reset: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_usage_reset: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     billing_period_start: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     email_verified: bool = False
