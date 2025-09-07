@@ -1,21 +1,21 @@
 import bcrypt
 import uuid
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from services.db_service import db_service
-from models.user import User, CreateUserData, UpdateUserData
+from models.user import UserDB, UserInternal, CreateUserData, UpdateUserData, dict_to_userdb
 
 
 class UserService:
-    async def create_user(self, user_data: CreateUserData) -> User:
+    async def create_user(self, user_data: CreateUserData) -> UserInternal:
         """Create a new user in the database"""
-        email = user_data.get("email")
-        password = user_data.get("password")
-        google_id = user_data.get("google_id")
-        first_name = user_data.get("first_name")
-        last_name = user_data.get("last_name")
-        company_name = user_data.get("company_name")
+        email = user_data.email
+        password = user_data.password
+        google_id = user_data.google_id
+        first_name = user_data.first_name
+        last_name = user_data.last_name
+        company_name = user_data.company_name
 
         # Hash password if provided (for traditional registration)
         hashed_password = None
@@ -58,33 +58,43 @@ class UserService:
         ]
 
         result = await db_service.query(query, values)
-        return result["rows"][0]
+        if result["rows"]:
+            return dict_to_userdb(result["rows"][0]).to_user_internal()
+        raise Exception("Failed to create user")
 
-    async def find_by_email(self, email: str) -> Optional[User]:
+    async def find_by_email(self, email: str) -> Optional[UserInternal]:
         """Find user by email address"""
         query = "SELECT * FROM users WHERE email = $1"
         result = await db_service.query(query, [email])
-        return result["rows"][0] if result["rows"] else None
+        if result["rows"]:
+            return dict_to_userdb(result["rows"][0]).to_user_internal()
+        return None
 
-    async def find_by_id(self, user_id: str) -> Optional[User]:
+    async def find_by_id(self, user_id: str) -> Optional[UserInternal]:
         """Find user by ID"""
         query = "SELECT * FROM users WHERE id = $1"
         result = await db_service.query(query, [user_id])
-        return result["rows"][0] if result["rows"] else None
+        if result["rows"]:
+            return dict_to_userdb(result["rows"][0]).to_user_internal()
+        return None
 
-    async def find_by_google_id(self, google_id: str) -> Optional[User]:
+    async def find_by_google_id(self, google_id: str) -> Optional[UserInternal]:
         """Find user by Google ID"""
         query = "SELECT * FROM users WHERE google_id = $1"
         result = await db_service.query(query, [google_id])
-        return result["rows"][0] if result["rows"] else None
+        if result["rows"]:
+            return dict_to_userdb(result["rows"][0]).to_user_internal()
+        return None
 
-    async def update_user(self, user_id: str, update_data: UpdateUserData) -> Optional[User]:
+    async def update_user(self, user_id: str, update_data: UpdateUserData) -> Optional[UserInternal]:
         """Update user data"""
         fields = []
         values = []
         param_count = 1
 
-        for key, value in update_data.items():
+        # Convert Pydantic model to dict and filter None values
+        update_dict = update_data.model_dump(exclude_unset=True)
+        for key, value in update_dict.items():
             if value is not None:
                 # Convert camelCase to snake_case
                 db_key = self._camel_to_snake(key)
@@ -106,7 +116,9 @@ class UserService:
         """
 
         result = await db_service.query(query, values)
-        return result["rows"][0] if result["rows"] else None
+        if result["rows"]:
+            return dict_to_userdb(result["rows"][0]).to_user_internal()
+        return None
 
     async def increment_usage_count(self, user_id: str) -> Dict[str, Any]:
         """Increment user's usage count with proper validation"""
@@ -147,8 +159,9 @@ class UserService:
                 "was_reset": reset_check["was_reset"]
             }
 
+        updated_user = dict_to_userdb(result["rows"][0]).to_user_internal()
         return {
-            "user": result["rows"][0],
+            "user": updated_user,
             "can_increment": True,
             "was_reset": reset_check["was_reset"]
         }
@@ -256,7 +269,7 @@ class UserService:
         }
         return limits.get(tier, 5)
 
-    async def get_all_users(self, limit: int = 50, offset: int = 0) -> List[User]:
+    async def get_all_users(self, limit: int = 50, offset: int = 0) -> List[UserInternal]:
         """Get all users (admin function)"""
         query = """
             SELECT * FROM users
@@ -265,7 +278,7 @@ class UserService:
             LIMIT $1 OFFSET $2
         """
         result = await db_service.query(query, [limit, offset])
-        return result["rows"]
+        return [dict_to_userdb(row).to_user_internal() for row in result["rows"]]
 
     async def get_user_stats(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user statistics"""
