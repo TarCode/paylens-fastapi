@@ -61,7 +61,7 @@ class DatabaseService:
                 
                 # Transform each row from snake_case to camelCase
                 transformed_rows = [transform_row(dict(row)) for row in rows]
-                return transformed_rows
+                return {"rows": transformed_rows}
             except Exception as e:
                 logger.error(f"Query execution failed: {e}")
                 raise
