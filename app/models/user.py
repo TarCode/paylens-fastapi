@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, func
-from pydantic import EmailStr, BaseModel
+from pydantic import EmailStr, BaseModel, Field as PydanticField
 from typing import Optional, Literal
 from datetime import datetime, timezone
 from enum import Enum
@@ -197,7 +197,7 @@ class UserInternal(BaseModel):
 
 
 class CreateUserData(BaseModel):
-    email: str
+    email: EmailStr
     password: Optional[str] = None  # Optional for Google OAuth users
     google_id: Optional[str] = None  # Google OAuth ID
     first_name: str
@@ -221,8 +221,8 @@ class UpdateUserData(BaseModel):
 
 
 class LoginData(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = PydanticField(..., min_length=6, description="Password must be at least 6 characters long")
 
 
 class AuthTokens(BaseModel):
@@ -243,7 +243,7 @@ class JWTPayload(BaseModel):
 
 class GoogleProfile(BaseModel):
     id: str
-    email: str
+    email: EmailStr
     verified_email: bool
     name: str
     given_name: str

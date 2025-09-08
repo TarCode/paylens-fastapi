@@ -217,7 +217,7 @@ class UserService:
                 return {"was_reset": False, "user": None}
 
             # Check if current date is in a new month compared to billing_period_start
-            current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             
             last_reset_month = user.billing_period_start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
