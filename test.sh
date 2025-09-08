@@ -1,5 +1,5 @@
 #!/bin/bash
-# Simple wrapper script for running tests easily
+# Simple test runner script for Paylens API
 
 set -e
 
@@ -43,7 +43,6 @@ show_usage() {
     echo "  --services       Run only service tests"
     echo "  --controllers    Run only controller tests"
     echo "  --skip-docker    Skip Docker database setup"
-    echo "  --cleanup        Clean up test artifacts and stop containers"
     echo "  --help           Show this help message"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
@@ -51,12 +50,10 @@ show_usage() {
     echo "  $0 --quick           # Quick test run"
     echo "  $0 --unit            # Run only unit tests"
     echo "  $0 --skip-docker     # Run tests without Docker"
-    echo "  $0 --cleanup         # Clean up test environment"
 }
 
 # Parse command line arguments
 QUICK=false
-CLEANUP_ONLY=false
 SKIP_DOCKER=false
 TEST_TYPE=""
 
@@ -98,10 +95,6 @@ while [[ $# -gt 0 ]]; do
             SKIP_DOCKER=true
             shift
             ;;
-        --cleanup)
-            CLEANUP_ONLY=true
-            shift
-            ;;
         --help)
             show_usage
             exit 0
@@ -114,52 +107,45 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Build the Python command
-PYTHON_CMD="python setup_and_test.py"
-
-if [ "$CLEANUP_ONLY" = true ]; then
-    echo -e "${YELLOW}🧹 Running cleanup only...${NC}"
-    $PYTHON_CMD --cleanup-only
-    exit $?
+# Install test dependencies if needed
+if [ -f "requirements-test.txt" ]; then
+    echo -e "${YELLOW}📦 Installing test dependencies...${NC}"
+    pip install -r requirements-test.txt
 fi
 
+# Run tests based on options
 if [ "$QUICK" = true ]; then
     echo -e "${YELLOW}⚡ Running quick tests...${NC}"
-    $PYTHON_CMD --quick
+    python -m pytest tests/ -v --tb=short
 elif [ -n "$TEST_TYPE" ]; then
     echo -e "${YELLOW}🎯 Running $TEST_TYPE tests...${NC}"
     case $TEST_TYPE in
         unit)
-            $PYTHON_CMD --test-path "tests/services/" --skip-docker
+            python -m pytest tests/services/ -v --tb=short
             ;;
         integration)
-            $PYTHON_CMD --test-path "tests/controllers/" --skip-docker
+            python -m pytest tests/controllers/ -v --tb=short
             ;;
         models)
-            $PYTHON_CMD --test-path "tests/models/" --skip-docker
+            python -m pytest tests/models/ -v --tb=short
             ;;
         validation)
-            $PYTHON_CMD --test-path "tests/validation/" --skip-docker
+            python -m pytest tests/validation/ -v --tb=short
             ;;
         middleware)
-            $PYTHON_CMD --test-path "tests/middleware/" --skip-docker
+            python -m pytest tests/middleware/ -v --tb=short
             ;;
         services)
-            $PYTHON_CMD --test-path "tests/services/" --skip-docker
+            python -m pytest tests/services/ -v --tb=short
             ;;
         controllers)
-            $PYTHON_CMD --test-path "tests/controllers/" --skip-docker
+            python -m pytest tests/controllers/ -v --tb=short
             ;;
     esac
 else
     # Full test suite
-    if [ "$SKIP_DOCKER" = true ]; then
-        echo -e "${YELLOW}🐳 Skipping Docker setup...${NC}"
-        $PYTHON_CMD --skip-docker
-    else
-        echo -e "${YELLOW}🚀 Running full test suite...${NC}"
-        $PYTHON_CMD
-    fi
+    echo -e "${YELLOW}🚀 Running full test suite...${NC}"
+    python -m pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html:htmlcov --tb=short
 fi
 
 # Check exit code

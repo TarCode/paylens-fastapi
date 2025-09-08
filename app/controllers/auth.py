@@ -141,10 +141,12 @@ async def get_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         user = await user_service.find_by_id(current_user["id"])
         if not user:
-            return not_found("User not found")
+            raise not_found("User not found")
 
         return ok({"user": user.to_user_response()})
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return server_error("Failed to retrieve profile")
 
@@ -157,10 +159,12 @@ async def update_profile(
     try:
         updated_user = await user_service.update_user(current_user["id"], request)
         if not updated_user:
-            return not_found("User not found")
+            raise not_found("User not found")
 
         return ok({"user": updated_user.to_user_response()})
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return server_error("Failed to update profile")
 
@@ -185,7 +189,7 @@ async def change_password(
         # Get user with password
         user = await user_service.find_by_id(current_user["id"])
         if not user:
-            return not_found("User not found")
+            raise not_found("User not found")
 
         # Check if user has a password (traditional login users)
         if not user.password:
@@ -204,6 +208,8 @@ async def change_password(
 
         return created(message="Password changed successfully")
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return server_error("Failed to change password")
 

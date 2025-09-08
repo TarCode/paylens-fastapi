@@ -61,7 +61,7 @@ test-cleanup:
 # Development commands
 setup-test-env:
 	@echo "🔧 Setting up test environment..."
-	python setup_and_test.py --skip-docker --skip-linting --skip-type-checking
+	python -m pytest tests/ -v
 
 install-deps:
 	@echo "📦 Installing dependencies..."

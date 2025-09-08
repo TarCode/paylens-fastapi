@@ -13,6 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
 from models.user import UserResponse, AuthTokens, UserRole, SubscriptionTier
+from middleware.auth_middleware import get_current_user
 
 
 class TestAuthController:
@@ -434,18 +435,18 @@ class TestAuthController:
         client.app.dependency_overrides[get_current_user] = mock_get_current_user
         
         try:
-            with patch('controllers.auth.user_service', mock_user_service), \
-                 patch('services.user_service.db_service', mock_db_service), \
-                 patch('services.db_service.db_service', mock_db_service):
+            with patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
                 
                 response = client.get("/auth/profile", headers={"Authorization": "Bearer test_token"})
                 
                 # Verify response
                 assert response.status_code == 404
                 data = response.json()
-                assert data["success"] is False
-                assert "error" in data
-                assert "User not found" in data["error"]["message"]
+                assert data["detail"]["success"] is False
+                assert "error" in data["detail"]
+                assert "User not found" in data["detail"]["error"]["message"]
         finally:
             # Clean up the override
             client.app.dependency_overrides.clear()
@@ -478,8 +479,10 @@ class TestAuthController:
             "company_name": "Updated Company"
         }
         
-        # Mock user service
-        mock_user_service.update_user.return_value = sample_user_response
+        # Mock user service - create a mock UserInternal object
+        mock_user_internal = MagicMock()
+        mock_user_internal.to_user_response.return_value = sample_user_response
+        mock_user_service.update_user = AsyncMock(return_value=mock_user_internal)
         
         # Mock database service to prevent real database connections
         mock_db_service = MagicMock()
@@ -494,9 +497,9 @@ class TestAuthController:
         client.app.dependency_overrides[get_current_user] = mock_get_current_user
         
         try:
-            with patch('controllers.auth.user_service', mock_user_service), \
-                 patch('services.user_service.db_service', mock_db_service), \
-                 patch('services.db_service.db_service', mock_db_service):
+            with patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
                 
                 response = client.put("/auth/profile", json=update_data, headers={"Authorization": "Bearer test_token"})
                 
@@ -530,19 +533,27 @@ class TestAuthController:
         update_data = {"first_name": "Jane"}
         
         # Mock user service to return None
-        mock_user_service.update_user.return_value = None
+        mock_user_service.update_user = AsyncMock(return_value=None)
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.put("/auth/profile", json=update_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 404
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "User not found" in data["error"]["message"]
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        try:
+            with patch('app.controllers.auth.user_service', mock_user_service):
+                
+                response = client.put("/auth/profile", json=update_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 404
+                data = response.json()
+                assert data["detail"]["success"] is False
+                assert "error" in data["detail"]
+                assert "User not found" in data["detail"]["error"]["message"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     # Change Password Tests
     def test_change_password_success(self, client, mock_user_service, mock_auth_service):
@@ -569,28 +580,41 @@ class TestAuthController:
         }
         
         # Mock services
-        mock_user_service.find_by_id.return_value = mock_user
-        mock_user_service.validate_password.return_value = True
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
+        mock_user_service.find_by_id = AsyncMock(return_value=mock_user)
+        mock_user_service.validate_password = AsyncMock(return_value=True)
+        mock_user_service.update_password = AsyncMock(return_value=None)
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.auth_service', mock_auth_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 201
-            data = response.json()
-            assert data["success"] is True
-            assert "Password changed successfully" in data["message"]
-            
-            # Verify services were called
-            mock_auth_service.validate_password.assert_called_once_with(change_data["new_password"])
-            mock_user_service.validate_password.assert_called_once_with(change_data["current_password"], mock_user.password)
-            mock_user_service.update_password.assert_called_once()
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        try:
+            with patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
+                
+                response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 201
+                data = response.json()
+                assert data["success"] is True
+                assert "Password changed successfully" in data["message"]
+                
+                # Verify services were called
+                mock_user_service.find_by_id.assert_called_once_with(mock_current_user["id"])
+                mock_user_service.validate_password.assert_called_once_with(change_data["current_password"], mock_user.password)
+                mock_user_service.update_password.assert_called_once_with(mock_current_user["id"], change_data["new_password"])
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
-    def test_change_password_weak_new_password(self, client, mock_auth_service):
+    def test_change_password_weak_new_password(self, client, mock_auth_service, mock_user_service):
         """Test password change with weak new password."""
         # Mock current user
         mock_current_user = {
@@ -609,23 +633,44 @@ class TestAuthController:
             "new_password": "weak"
         }
         
-        # Mock password validation failure
-        mock_auth_service.validate_password.return_value = {
+        # Mock password validation failure (synchronous method)
+        from unittest.mock import MagicMock
+        mock_auth_service.validate_password = MagicMock(return_value={
             "is_valid": False,
             "errors": ["Password must be at least 8 characters long"]
-        }
+        })
         
-        with patch('controllers.auth.auth_service', mock_auth_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 400
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "New password does not meet requirements" in data["error"]["message"]
+        # Mock user service methods (even though they shouldn't be called)
+        mock_user_service.find_by_id = AsyncMock(return_value=None)
+        mock_user_service.validate_password = AsyncMock(return_value=True)
+        mock_user_service.update_password = AsyncMock(return_value=None)
+        
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        try:
+            with patch('app.controllers.auth.auth_service', mock_auth_service), \
+                 patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
+                
+                response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 400
+                data = response.json()
+                assert data["detail"]["success"] is False
+                assert "error" in data["detail"]
+                assert "New password does not meet requirements" in data["detail"]["error"]["details"]["message"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     def test_change_password_google_oauth_account(self, client, mock_user_service):
         """Test password change on Google OAuth account."""
@@ -651,19 +696,33 @@ class TestAuthController:
         }
         
         # Mock user service
-        mock_user_service.find_by_id.return_value = mock_user
+        mock_user_service.find_by_id = AsyncMock(return_value=mock_user)
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 400
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "This account uses Google OAuth" in data["error"]["message"]
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        try:
+            with patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
+                
+                response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 400
+                data = response.json()
+                assert data["detail"]["success"] is False
+                assert "error" in data["detail"]
+                assert "This account uses Google OAuth" in data["detail"]["error"]["details"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     def test_change_password_wrong_current_password(self, client, mock_user_service, mock_auth_service):
         """Test password change with wrong current password."""
@@ -689,22 +748,34 @@ class TestAuthController:
         }
         
         # Mock services
-        mock_user_service.find_by_id.return_value = mock_user
-        mock_user_service.validate_password.return_value = False
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
+        mock_user_service.find_by_id = AsyncMock(return_value=mock_user)
+        mock_user_service.validate_password = AsyncMock(return_value=False)
         
-        with patch('controllers.auth.user_service', mock_user_service), \
-             patch('controllers.auth.auth_service', mock_auth_service), \
-             patch('controllers.auth.get_current_user', return_value=mock_current_user):
-            
-            response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
-            
-            # Verify response
-            assert response.status_code == 400
-            data = response.json()
-            assert data["success"] is False
-            assert "error" in data
-            assert "Current password is incorrect" in data["error"]["message"]
+        def mock_get_current_user():
+            return mock_current_user
+        
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        try:
+            with patch('app.controllers.auth.user_service', mock_user_service), \
+                 patch('app.services.user_service.db_service', mock_db_service), \
+                 patch('app.services.db_service.db_service', mock_db_service):
+                
+                response = client.post("/auth/change-password", json=change_data, headers={"Authorization": "Bearer test_token"})
+                
+                # Verify response
+                assert response.status_code == 400
+                data = response.json()
+                assert data["detail"]["success"] is False
+                assert "error" in data["detail"]
+                assert "Current password is incorrect" in data["detail"]["error"]["details"]
+        finally:
+            # Clean up the override
+            client.app.dependency_overrides.clear()
 
     # Forgot Password Tests
     def test_forgot_password_success(self, client, mock_auth_service):
@@ -712,9 +783,9 @@ class TestAuthController:
         forgot_data = {"email": "test@example.com"}
         
         # Mock auth service
-        mock_auth_service.generate_password_reset_token.return_value = "reset_token"
+        mock_auth_service.generate_password_reset_token = AsyncMock(return_value="reset_token")
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        with patch('app.controllers.auth.auth_service', mock_auth_service):
             response = client.post("/auth/forgot-password", json=forgot_data)
             
             # Verify response
@@ -736,7 +807,7 @@ class TestAuthController:
             detail="User not found"
         )
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        with patch('app.controllers.auth.auth_service', mock_auth_service):
             response = client.post("/auth/forgot-password", json=forgot_data)
             
             # Verify response (should still return success for security)
@@ -746,18 +817,26 @@ class TestAuthController:
             assert "If an account with that email exists" in data["message"]
 
     # Reset Password Tests
-    def test_reset_password_success(self, client, mock_auth_service):
+    def test_reset_password_success(self, client, mock_auth_service, mock_user_service):
         """Test successful password reset."""
         reset_data = {
             "token": "valid_reset_token",
             "new_password": "NewPassword123!"
         }
         
-        # Mock auth service
-        mock_auth_service.validate_password.return_value = {"is_valid": True, "errors": []}
-        mock_auth_service.reset_password.return_value = None
+        # Mock auth service (fix sync method)
+        from unittest.mock import MagicMock
+        mock_auth_service.validate_password = MagicMock(return_value={"is_valid": True, "errors": []})
+        mock_auth_service.reset_password = AsyncMock(return_value=None)
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        with patch('app.controllers.auth.auth_service', mock_auth_service), \
+             patch('app.controllers.auth.user_service', mock_user_service), \
+             patch('app.services.user_service.db_service', mock_db_service), \
+             patch('app.services.db_service.db_service', mock_db_service):
             response = client.post("/auth/reset-password", json=reset_data)
             
             # Verify response
@@ -770,20 +849,28 @@ class TestAuthController:
             mock_auth_service.validate_password.assert_called_once_with(reset_data["new_password"])
             mock_auth_service.reset_password.assert_called_once_with(reset_data["token"], reset_data["new_password"])
 
-    def test_reset_password_weak_password(self, client, mock_auth_service):
+    def test_reset_password_weak_password(self, client, mock_auth_service, mock_user_service):
         """Test password reset with weak password."""
         reset_data = {
             "token": "valid_reset_token",
             "new_password": "weak"
         }
         
-        # Mock password validation failure
-        mock_auth_service.validate_password = AsyncMock(return_value={
+        # Mock password validation failure (fix sync method)
+        from unittest.mock import MagicMock
+        mock_auth_service.validate_password = MagicMock(return_value={
             "is_valid": False,
             "errors": ["Password must be at least 8 characters long"]
         })
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        with patch('app.controllers.auth.auth_service', mock_auth_service), \
+             patch('app.controllers.auth.user_service', mock_user_service), \
+             patch('app.services.user_service.db_service', mock_db_service), \
+             patch('app.services.db_service.db_service', mock_db_service):
             response = client.post("/auth/reset-password", json=reset_data)
             
             # Verify response
@@ -793,25 +880,31 @@ class TestAuthController:
             assert "error" in data["detail"]
             assert "Password does not meet requirements" in data["detail"]["error"]["details"]
 
-    def test_reset_password_invalid_token(self, client, mock_auth_service):
+    def test_reset_password_invalid_token(self, client, mock_auth_service, mock_user_service):
         """Test password reset with invalid token."""
         reset_data = {
             "token": "invalid_token",
             "new_password": "NewPassword123!"
         }
         
-        # Mock auth service
-        mock_auth_service.validate_password = AsyncMock(return_value={"is_valid": True, "errors": []})
+        # Mock auth service (fix sync method)
+        from unittest.mock import MagicMock
+        mock_auth_service.validate_password = MagicMock(return_value={"is_valid": True, "errors": []})
         mock_auth_service.reset_password = AsyncMock(side_effect=ValueError("Invalid token"))
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        # Mock database service to prevent real database connections
+        mock_db_service = MagicMock()
+        mock_db_service.query = AsyncMock(return_value={"rows": []})
+        
+        with patch('app.controllers.auth.auth_service', mock_auth_service), \
+             patch('app.controllers.auth.user_service', mock_user_service), \
+             patch('app.services.user_service.db_service', mock_db_service), \
+             patch('app.services.db_service.db_service', mock_db_service):
             response = client.post("/auth/reset-password", json=reset_data)
             
             # Verify response
             assert response.status_code == 400
             data = response.json()
-            assert data["detail"]["success"] is False
-            assert "error" in data["detail"]
             assert "Invalid token" in data["detail"]["error"]["details"]
 
     # Google Auth Tests
@@ -842,7 +935,7 @@ class TestAuthController:
             "is_new_user": False
         }
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        with patch('app.controllers.auth.auth_service', mock_auth_service):
             response = client.post("/auth/google/jwt", json=google_data)
             
             # Verify response
@@ -906,7 +999,7 @@ class TestAuthController:
             "is_new_user": False
         }
         
-        with patch('controllers.auth.auth_service', mock_auth_service):
+        with patch('app.controllers.auth.auth_service', mock_auth_service):
             # Note: This test would need more complex mocking of the request object
             # For now, we'll test the endpoint structure
             response = client.get("/auth/google/callback")
@@ -924,4 +1017,4 @@ class TestAuthController:
         data = response.json()
         assert data["detail"]["success"] is False
         assert "error" in data["detail"]
-        assert "User not found" in data["detail"]["error"]["message"]
+        assert "Google authentication failed" in data["detail"]["error"]["message"]

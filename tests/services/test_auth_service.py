@@ -122,11 +122,11 @@ class TestAuthService:
     async def test_register_token_generation_failure(self, auth_service, mock_user_service, sample_create_user_data, sample_user_internal):
         """Test registration when token generation fails."""
         # Mock user service methods
-        mock_user_service.find_by_email.return_value = None
-        mock_user_service.create_user.return_value = sample_user_internal
+        mock_user_service.find_by_email = AsyncMock(return_value=None)
+        mock_user_service.create_user = AsyncMock(return_value=sample_user_internal)
         
         # Mock generate_tokens to raise an exception
-        with patch('app.services.auth_service.user_service', mock_user_service), \
+        with patch('services.auth_service.user_service', mock_user_service), \
              patch.object(auth_service, 'generate_tokens', side_effect=Exception("Token generation failed")):
             
             with pytest.raises(HTTPException) as exc_info:
@@ -592,13 +592,20 @@ class TestAuthService:
             assert "User not found" in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
-    async def test_reset_password_not_implemented(self, auth_service):
-        """Test password reset (not implemented)."""
+    async def test_reset_password_valid_token(self, auth_service):
+        """Test password reset with valid token."""
+        # Should not raise an exception for valid tokens
+        result = await auth_service.reset_password("valid_token", "new_password")
+        assert result is None  # Method returns None on success
+    
+    @pytest.mark.asyncio
+    async def test_reset_password_invalid_token(self, auth_service):
+        """Test password reset with invalid token."""
         with pytest.raises(HTTPException) as exc_info:
-            await auth_service.reset_password("token", "new_password")
+            await auth_service.reset_password("invalid_token", "new_password")
         
-        assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
-        assert "Password reset functionality needs to be implemented" in str(exc_info.value.detail)
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid or expired reset token" in str(exc_info.value.detail)
 
     # Email Verification Tests
     @pytest.mark.asyncio

@@ -446,8 +446,12 @@ class TestUserService:
         user_at_limit["usage_count"] = 5  # At free tier limit
         user_at_limit["monthly_limit"] = 5
         
-        # Mock database service
-        mock_db_service.query.return_value = {"rows": []}  # No rows returned (limit exceeded)
+        # Mock database service - multiple calls needed
+        mock_db_service.query.side_effect = [
+            {"rows": [user_at_limit]},  # First call: find user for reset check in check_and_reset_monthly_usage
+            {"rows": []},  # Second call: increment fails (limit exceeded)
+            {"rows": [user_at_limit]},  # Third call: find user again after increment fails
+        ]
         
         with patch('services.user_service.db_service', mock_db_service):
             result = await user_service.increment_usage_count(user_id)
