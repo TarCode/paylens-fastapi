@@ -136,30 +136,31 @@ async def refresh_token(request: RefreshTokenRequest):
         return unauthorized(str(e))
 
 @router.get("/profile")
-async def get_profile(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_profile(current_user = Depends(get_current_user)):
     """Get user profile"""
     try:
-        user = await user_service.find_by_id(current_user["id"])
+        user = await user_service.find_by_id(current_user.id)
         if not user:
-            raise not_found("User not found")
+            return not_found("User not found")
 
         return ok({"user": user.to_user_response()})
 
     except HTTPException as e:
         raise e
     except Exception as e:
+        print(f"Profile retrieval error: {e}")
         return server_error("Failed to retrieve profile")
 
 @router.put("/profile")
 async def update_profile(
     request: UpdateProfileRequest, 
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Update user profile"""
     try:
-        updated_user = await user_service.update_user(current_user["id"], request)
+        updated_user = await user_service.update_user(current_user.id, request)
         if not updated_user:
-            raise not_found("User not found")
+            return not_found("User not found")
 
         return ok({"user": updated_user.to_user_response()})
 
@@ -171,7 +172,7 @@ async def update_profile(
 @router.post("/change-password", status_code=201)
 async def change_password(
     request: ChangePasswordRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """Change user password"""
     try:
@@ -187,9 +188,9 @@ async def change_password(
             })
 
         # Get user with password
-        user = await user_service.find_by_id(current_user["id"])
+        user = await user_service.find_by_id(current_user.id)
         if not user:
-            raise not_found("User not found")
+            return not_found("User not found")
 
         # Check if user has a password (traditional login users)
         if not user.password:
@@ -204,7 +205,7 @@ async def change_password(
             return bad_request("Current password is incorrect")
 
         # Update password
-        await user_service.update_password(current_user["id"], request.new_password)
+        await user_service.update_password(current_user.id, request.new_password)
 
         return created(message="Password changed successfully")
 

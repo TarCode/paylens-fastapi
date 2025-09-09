@@ -385,7 +385,7 @@ class TestAuthMiddleware:
         """Test AuthMiddleware initialization with default JWT secret."""
         with patch.dict('os.environ', {}, clear=True):
             middleware = AuthMiddleware()
-            assert middleware.jwt_secret == 'fallback-secret'
+            assert middleware.jwt_secret == 'fallback-secret-change-in-production'
 
     # Token Validation Tests
     @pytest.mark.asyncio

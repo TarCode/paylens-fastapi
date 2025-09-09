@@ -13,7 +13,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
 from models.user import UserResponse, AuthTokens, UserRole, SubscriptionTier
-from middleware.auth_middleware import get_current_user
+from middleware.auth_middleware import get_current_user, User
+from datetime import datetime
 
 
 class TestAuthController:
@@ -344,16 +345,16 @@ class TestAuthController:
     def test_get_profile_success(self, client, sample_user_response, mock_db_service):
         """Test successful profile retrieval."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         # Mock database to return user
         user_data = {
@@ -400,7 +401,7 @@ class TestAuthController:
             assert data["success"] is True
             assert "data" in data
             assert "user" in data["data"]
-            assert data["data"]["user"]["email"] == mock_current_user["email"]
+            assert data["data"]["user"]["email"] == mock_current_user.email
         finally:
             # Clean up the override
             client.app.dependency_overrides.clear()
@@ -408,16 +409,16 @@ class TestAuthController:
     def test_get_profile_user_not_found(self, client, mock_user_service):
         """Test profile retrieval when user is not found."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         # Mock user service to return None
         mock_user_service.find_by_id.return_value = None
@@ -462,16 +463,16 @@ class TestAuthController:
     def test_update_profile_success(self, client, mock_user_service, sample_user_response):
         """Test successful profile update."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         update_data = {
             "first_name": "Jane",
@@ -519,16 +520,16 @@ class TestAuthController:
     def test_update_profile_user_not_found(self, client, mock_user_service):
         """Test profile update when user is not found."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         update_data = {"first_name": "Jane"}
         
@@ -559,16 +560,16 @@ class TestAuthController:
     def test_change_password_success(self, client, mock_user_service, mock_auth_service):
         """Test successful password change."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         # Mock user with password
         mock_user = MagicMock()
@@ -607,9 +608,9 @@ class TestAuthController:
                 assert "Password changed successfully" in data["message"]
                 
                 # Verify services were called
-                mock_user_service.find_by_id.assert_called_once_with(mock_current_user["id"])
+                mock_user_service.find_by_id.assert_called_once_with(mock_current_user.id)
                 mock_user_service.validate_password.assert_called_once_with(change_data["current_password"], mock_user.password)
-                mock_user_service.update_password.assert_called_once_with(mock_current_user["id"], change_data["new_password"])
+                mock_user_service.update_password.assert_called_once_with(mock_current_user.id, change_data["new_password"])
         finally:
             # Clean up the override
             client.app.dependency_overrides.clear()
@@ -617,16 +618,16 @@ class TestAuthController:
     def test_change_password_weak_new_password(self, client, mock_auth_service, mock_user_service):
         """Test password change with weak new password."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         change_data = {
             "current_password": "CurrentPassword123!",
@@ -675,16 +676,16 @@ class TestAuthController:
     def test_change_password_google_oauth_account(self, client, mock_user_service):
         """Test password change on Google OAuth account."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         # Mock user without password (Google OAuth)
         mock_user = MagicMock()
@@ -727,16 +728,16 @@ class TestAuthController:
     def test_change_password_wrong_current_password(self, client, mock_user_service, mock_auth_service):
         """Test password change with wrong current password."""
         # Mock current user
-        mock_current_user = {
-            "id": "test-user-id",
-            "email": "test@example.com",
-            "role": "user",
-            "subscription_tier": "free",
-            "usage_count": 0,
-            "monthly_limit": 5,
-            "last_usage_reset": "2024-01-01T00:00:00Z",
-            "billing_period_start": "2024-01-01T00:00:00Z"
-        }
+        mock_current_user = User(
+            id="test-user-id",
+            email="test@example.com",
+            role=UserRole.USER,
+            subscription_tier=SubscriptionTier.FREE,
+            usage_count=0,
+            monthly_limit=5,
+            last_usage_reset=datetime(2024, 1, 1),
+            billing_period_start=datetime(2024, 1, 1)
+        )
         
         # Mock user with password
         mock_user = MagicMock()
