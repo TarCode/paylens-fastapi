@@ -30,7 +30,7 @@ class AuthMiddleware:
     """
     
     def __init__(self):
-        self.jwt_secret = os.getenv('JWT_SECRET', 'fallback-secret')
+        self.jwt_secret = os.getenv('JWT_SECRET', 'fallback-secret-change-in-production')
         self.security = HTTPBearer()
 
     async def authenticate_and_ensure_user(self, credentials: HTTPAuthorizationCredentials = None) -> User:
@@ -93,6 +93,8 @@ class AuthMiddleware:
             )
         except Exception as e:
             print(f"JWT verification error: {e}")
+            print(f"Token received: {credentials.credentials[:50]}..." if len(credentials.credentials) > 50 else f"Token received: {credentials.credentials}")
+            print(f"JWT Secret being used: {self.jwt_secret[:10]}...")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
