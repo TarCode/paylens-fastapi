@@ -123,13 +123,11 @@ class TestAuthController:
         # Verify response
         assert response.status_code == 201
         data = response.json()
-        assert data["success"] is True
-        assert "data" in data
-        assert "user" in data["data"]
-        assert "tokens" in data["data"]
-        assert data["data"]["user"]["email"] == sample_register_data["email"]
-        assert "access_token" in data["data"]["tokens"]
-        assert "refresh_token" in data["data"]["tokens"]
+        assert "user" in data
+        assert "tokens" in data
+        assert data["user"]["email"] == sample_register_data["email"]
+        assert "access_token" in data["tokens"]
+        assert "refresh_token" in data["tokens"]
 
     def test_register_password_validation_failure(self, client):
         """Test registration with weak password."""
@@ -239,11 +237,9 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 200
             data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            assert "tokens" in data["data"]
-            assert data["data"]["user"]["email"] == sample_login_data["email"]
+            assert "user" in data
+            assert "tokens" in data
+            assert data["user"]["email"] == sample_login_data["email"]
 
     def test_login_invalid_credentials(self, client, sample_login_data, mock_db_service):
         """Test login with invalid credentials."""
@@ -309,10 +305,8 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 200
             data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            assert "tokens" in data["data"]
+            assert "user" in data
+            assert "tokens" in data
 
     def test_refresh_token_invalid_token(self, client):
         """Test refresh token with invalid token."""
@@ -398,10 +392,8 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 200
             data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            assert data["data"]["user"]["email"] == mock_current_user.email
+            assert "user" in data
+            assert data["user"]["email"] == mock_current_user.email
         finally:
             # Clean up the override
             client.app.dependency_overrides.clear()
@@ -507,9 +499,7 @@ class TestAuthController:
                 # Verify response
                 assert response.status_code == 200
                 data = response.json()
-                assert data["success"] is True
-                assert "data" in data
-                assert "user" in data["data"]
+                assert "user" in data
                 
                 # Verify user service was called
                 mock_user_service.update_user.assert_called_once()
@@ -604,8 +594,7 @@ class TestAuthController:
                 # Verify response
                 assert response.status_code == 201
                 data = response.json()
-                assert data["success"] is True
-                assert "Password changed successfully" in data["message"]
+                assert "Password changed successfully" in data
                 
                 # Verify services were called
                 mock_user_service.find_by_id.assert_called_once_with(mock_current_user.id)
@@ -792,8 +781,7 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 201
             data = response.json()
-            assert data["success"] is True
-            assert "If an account with that email exists" in data["message"]
+            assert "If an account with that email exists" in data
             
             # Verify auth service was called
             mock_auth_service.generate_password_reset_token.assert_called_once_with(forgot_data["email"])
@@ -814,8 +802,7 @@ class TestAuthController:
             # Verify response (should still return success for security)
             assert response.status_code == 201
             data = response.json()
-            assert data["success"] is True
-            assert "If an account with that email exists" in data["message"]
+            assert "If an account with that email exists" in data
 
     # Reset Password Tests
     def test_reset_password_success(self, client, mock_auth_service, mock_user_service):
@@ -843,8 +830,7 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 200
             data = response.json()
-            assert data["success"] is True
-            assert "Password reset successfully" in data["data"]["message"]
+            assert "Password reset successfully" in data["message"]
             
             # Verify auth service was called
             mock_auth_service.validate_password.assert_called_once_with(reset_data["new_password"])
@@ -942,12 +928,9 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 201
             data = response.json()
-            assert data["success"] is True
-            assert "data" in data
-            assert "user" in data["data"]
-            assert "tokens" in data["data"]
-            assert "is_new_user" in data["data"]
-            assert "Google authentication successful" in data["message"]
+            assert "user" in data
+            assert "tokens" in data
+            assert "is_new_user" in data
             
             # Verify auth service was called
             mock_auth_service.authenticate_with_google.assert_called_once()

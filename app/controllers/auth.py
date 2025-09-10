@@ -1,22 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, validator
-from typing import Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 import json
 import base64
 from services.auth_service import auth_service
 from services.user_service import user_service
-from models.user import GoogleProfile, UserResponse, UserInternal, AuthTokens
+from models.user import GoogleProfile, UserResponse, AuthTokens
 from middleware.auth_middleware import get_current_user
 from validation.auth_validation import (
+    RegisterData,
+    LoginData
+)
+from helpers.response import (
     bad_request,
     created, 
     not_found,
     ok,
     server_error,
     unauthorized,
-    RegisterData,
-    LoginData
 )
 
 # Additional Pydantic Models (beyond those in auth_validation)
@@ -86,7 +88,7 @@ async def register(request: RegisterData):
         return created({
             "user": result["user"],
             "tokens": result["tokens"]
-        }, "User registered successfully")
+        })
 
     except HTTPException as e:
         if e.status_code == 400:
@@ -207,7 +209,7 @@ async def change_password(
         # Update password
         await user_service.update_password(current_user.id, request.new_password)
 
-        return created(message="Password changed successfully")
+        return created("Password changed successfully")
 
     except HTTPException as e:
         raise e
@@ -229,7 +231,7 @@ async def forgot_password(request: ForgotPasswordRequest):
             # Silently ignore errors for security
             pass
 
-        return created(message="If an account with that email exists, a password reset link has been sent.")
+        return created("If an account with that email exists, a password reset link has been sent.")
 
     except Exception as e:
         return server_error("Failed to process password reset request")
@@ -319,7 +321,7 @@ async def google_jwt_auth(request: GoogleJWTRequest):
             "user": result["user"],
             "tokens": result["tokens"],
             "is_new_user": result["is_new_user"]
-        }, "Google authentication successful")
+        })
 
     except HTTPException:
         # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
