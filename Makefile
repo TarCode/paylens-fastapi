@@ -58,6 +58,29 @@ test-cleanup:
 	@echo "🧹 Cleaning up test environment..."
 	./test.sh --cleanup
 
+# Coverage commands
+coverage:
+	@echo "📊 Running tests with coverage..."
+	coverage run -m pytest tests/ --verbose
+	coverage report --show-missing
+	coverage html
+	@echo "📊 Coverage report generated in htmlcov/index.html"
+
+coverage-xml:
+	@echo "📊 Generating XML coverage report..."
+	coverage run -m pytest tests/ --verbose
+	coverage xml
+	@echo "📊 XML coverage report generated: coverage.xml"
+
+coverage-report:
+	@echo "📊 Displaying coverage report..."
+	coverage report --show-missing
+
+coverage-html:
+	@echo "📊 Generating HTML coverage report..."
+	coverage html
+	@echo "📊 HTML coverage report generated in htmlcov/index.html"
+
 # Development commands
 setup-test-env:
 	@echo "🔧 Setting up test environment..."
