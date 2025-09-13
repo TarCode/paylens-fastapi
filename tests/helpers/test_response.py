@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
 from helpers.response import (
-    ok, created, bad_request, unauthorized, not_found, server_error, ErrorResponse, SuccessResponse
+    bad_request, unauthorized, not_found, server_error, ErrorResponse, SuccessResponse
 )
 
 
@@ -19,51 +19,8 @@ class TestAuthValidation:
     """Test cases for Auth Validation utilities."""
 
     # Response Helper Tests
-    def test_ok_response_with_data(self):
-        """Test ok response with data."""
-        test_data = {"user": "test_user", "id": 123}
-        response = ok(test_data)
-        
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 200
-        
-        content = response.body.decode()
-        assert '"user":"test_user"' in content
-        assert '"id":123' in content
-
-    def test_ok_response_without_data(self):
-        """Test ok response without data."""
-        response = ok()
-        
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 200
-        
-        content = response.body.decode()
-        assert '"data"' not in content
-
-    def test_created_response_with_data_and_message(self):
-        """Test created response with data and message."""
-        test_data = {"user": "test_user", "id": 123}
-        message = "User created successfully"
-        response = created(test_data)
-        
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 201
-        
-        content = response.body.decode()
-        assert '{"user":"test_user","id":123}' in content
-
-    def test_created_response_without_data(self):
-        """Test created response without data."""
-        message = "Resource created"
-        response = created(message)
-        
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 201
-        
-        content = response.body.decode()
-        assert '"Resource created"' in content
-        assert '"data"' not in content
+    # Note: ok() and created() functions are no longer used in controllers
+    # as we now return Pydantic models directly for better OpenAPI documentation
 
     def test_bad_request_exception(self):
         """Test bad request exception."""
@@ -178,44 +135,5 @@ class TestAuthValidation:
         assert response.error == error_details
 
     # Edge Cases and Integration Tests
-    def test_response_helpers_with_complex_data(self):
-        """Test response helpers with complex data structures."""
-        complex_data = {
-            "user": {
-                "id": 123,
-                "email": "test@example.com",
-                "profile": {
-                    "first_name": "John",
-                    "last_name": "Doe",
-                    "preferences": ["email", "sms"]
-                }
-            },
-            "tokens": {
-                "access_token": "abc123",
-                "refresh_token": "def456"
-            }
-        }
-        
-        response = ok(complex_data)
-        
-        assert isinstance(response, JSONResponse)
-        content = response.body.decode()
-        assert '"id":123' in content
-        assert '"first_name":"John"' in content
-        assert '"preferences":["email","sms"]' in content
-
-    def test_response_helpers_with_datetime_data(self):
-        """Test response helpers with datetime data."""
-        from datetime import datetime, timezone
-        
-        data_with_datetime = {
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc)
-        }
-        
-        response = ok(data_with_datetime)
-        
-        assert isinstance(response, JSONResponse)
-        content = response.body.decode()
-        assert '"created_at"' in content
-        assert '"updated_at"' in content
+    # Complex data and datetime tests removed as ok() function is no longer used
+    # Controllers now return Pydantic models directly

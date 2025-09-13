@@ -14,11 +14,10 @@ from validation.auth_validation import (
 )
 from helpers.response import (
     bad_request,
-    created, 
     not_found,
-    ok,
     server_error,
     unauthorized,
+    ErrorResponse
 )
 
 # Additional Pydantic Models (beyond those in auth_validation)
@@ -61,11 +60,25 @@ class GoogleAuthResponse(BaseModel):
     tokens: AuthTokens
     is_new_user: bool
 
+class MessageResponse(BaseModel):
+    message: str
+
+class SuccessMessageResponse(BaseModel):
+    success: bool
+    message: str
+
 # Router
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
-@router.post("/register", status_code=201)
+@router.post("/register", 
+    status_code=201,
+    response_model=AuthResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Password validation failed or registration failed"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def register(request: RegisterData):
     """Register a new user"""
     try:
@@ -85,10 +98,10 @@ async def register(request: RegisterData):
         )
         result = await auth_service.register(create_data)
 
-        return created({
-            "user": result["user"],
-            "tokens": result["tokens"]
-        })
+        return AuthResponse(
+            user=result["user"],
+            tokens=result["tokens"]
+        )
 
     except HTTPException as e:
         if e.status_code == 400:
@@ -98,7 +111,13 @@ async def register(request: RegisterData):
         print(f"[ERROR] Registration failed: {e}")
         return server_error("Registration failed")
 
-@router.post("/login")
+@router.post("/login",
+    response_model=AuthResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Invalid credentials or account deactivated"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def login(request: LoginData):
     """Login user"""
     try:
@@ -107,17 +126,23 @@ async def login(request: LoginData):
             "password": request.password
         })
 
-        return ok({
-            "user": result["user"],
-            "tokens": result["tokens"]
-        })
+        return AuthResponse(
+            user=result["user"],
+            tokens=result["tokens"]
+        )
 
     except ValueError as e:
         if str(e) in ["Invalid email or password", "Account is deactivated. Please contact support."]:
             return unauthorized(str(e))
         return server_error("Login failed")
 
-@router.post("/refresh-token")
+@router.post("/refresh-token",
+    response_model=AuthResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Refresh token is required"},
+        401: {"model": ErrorResponse, "description": "Invalid or expired refresh token"}
+    }
+)
 async def refresh_token(request: RefreshTokenRequest):
     """Refresh access token"""
     try:
@@ -126,10 +151,10 @@ async def refresh_token(request: RefreshTokenRequest):
 
         result = await auth_service.refresh_token(request.refresh_token)
 
-        return ok({
-            "user": result["user"],
-            "tokens": result["tokens"]
-        })
+        return AuthResponse(
+            user=result["user"],
+            tokens=result["tokens"]
+        )
 
     except HTTPException:
         # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
@@ -137,7 +162,14 @@ async def refresh_token(request: RefreshTokenRequest):
     except Exception as e:
         return unauthorized(str(e))
 
-@router.get("/profile")
+@router.get("/profile",
+    response_model=ProfileResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "User not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def get_profile(current_user = Depends(get_current_user)):
     """Get user profile"""
     try:
@@ -145,7 +177,7 @@ async def get_profile(current_user = Depends(get_current_user)):
         if not user:
             return not_found("User not found")
 
-        return ok({"user": user.to_user_response()})
+        return ProfileResponse(user=user.to_user_response())
 
     except HTTPException as e:
         raise e
@@ -153,7 +185,14 @@ async def get_profile(current_user = Depends(get_current_user)):
         print(f"Profile retrieval error: {e}")
         return server_error("Failed to retrieve profile")
 
-@router.put("/profile")
+@router.put("/profile",
+    response_model=ProfileResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "User not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def update_profile(
     request: UpdateProfileRequest, 
     current_user = Depends(get_current_user)
@@ -164,14 +203,23 @@ async def update_profile(
         if not updated_user:
             return not_found("User not found")
 
-        return ok({"user": updated_user.to_user_response()})
+        return ProfileResponse(user=updated_user.to_user_response())
 
     except HTTPException as e:
         raise e
     except Exception as e:
         return server_error("Failed to update profile")
 
-@router.post("/change-password", status_code=201)
+@router.post("/change-password", 
+    status_code=201,
+    response_model=MessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid password or validation failed"},
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "User not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def change_password(
     request: ChangePasswordRequest,
     current_user = Depends(get_current_user)
@@ -209,14 +257,21 @@ async def change_password(
         # Update password
         await user_service.update_password(current_user.id, request.new_password)
 
-        return created("Password changed successfully")
+        return MessageResponse(message="Password changed successfully")
 
     except HTTPException as e:
         raise e
     except Exception as e:
         return server_error("Failed to change password")
 
-@router.post("/forgot-password", status_code=201)
+@router.post("/forgot-password", 
+    status_code=201,
+    response_model=MessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Email is required"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 async def forgot_password(request: ForgotPasswordRequest):
     """Request password reset"""
     try:
@@ -231,12 +286,17 @@ async def forgot_password(request: ForgotPasswordRequest):
             # Silently ignore errors for security
             pass
 
-        return created("If an account with that email exists, a password reset link has been sent.")
+        return MessageResponse(message="If an account with that email exists, a password reset link has been sent.")
 
     except Exception as e:
         return server_error("Failed to process password reset request")
 
-@router.post("/reset-password")
+@router.post("/reset-password",
+    response_model=SuccessMessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid token, password requirements not met, or missing fields"}
+    }
+)
 async def reset_password(request: ResetPasswordRequest):
     """Reset password with token"""
     try:
@@ -250,10 +310,10 @@ async def reset_password(request: ResetPasswordRequest):
 
         await auth_service.reset_password(request.token, request.new_password)
 
-        return ok({
-            "success": True,
-            "message": "Password reset successfully"
-        })
+        return SuccessMessageResponse(
+            success=True,
+            message="Password reset successfully"
+        )
 
     except HTTPException:
         # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
@@ -261,7 +321,12 @@ async def reset_password(request: ResetPasswordRequest):
     except Exception as e:
         return bad_request(str(e))
 
-@router.get("/google/callback")
+@router.get("/google/callback",
+    response_model=GoogleAuthResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "User not found or Google authentication failed"}
+    }
+)
 async def google_auth_callback(request: Request):
     """Google OAuth callback"""
     try:
@@ -277,17 +342,24 @@ async def google_auth_callback(request: Request):
 
         result = await auth_service.authenticate_with_google(profile)
 
-        return ok({
-            "user": result["user"],
-            "tokens": result["tokens"],
-            "is_new_user": result["is_new_user"]
-        })
+        return GoogleAuthResponse(
+            user=result["user"],
+            tokens=result["tokens"],
+            is_new_user=result["is_new_user"]
+        )
 
     except Exception as e:
         print(f"Google auth callback error: {e}")
         return unauthorized("Google authentication failed")
 
-@router.post("/google/jwt", status_code=201)
+@router.post("/google/jwt", 
+    status_code=201,
+    response_model=GoogleAuthResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Google JWT credential is required or invalid JWT token format"},
+        500: {"model": ErrorResponse, "description": "Google authentication failed"}
+    }
+)
 async def google_jwt_auth(request: GoogleJWTRequest):
     """Google JWT authentication"""
     try:
@@ -317,11 +389,11 @@ async def google_jwt_auth(request: GoogleJWTRequest):
 
         result = await auth_service.authenticate_with_google(profile)
 
-        return created({
-            "user": result["user"],
-            "tokens": result["tokens"],
-            "is_new_user": result["is_new_user"]
-        })
+        return GoogleAuthResponse(
+            user=result["user"],
+            tokens=result["tokens"],
+            is_new_user=result["is_new_user"]
+        )
 
     except HTTPException:
         # Re-raise HTTPExceptions (like bad_request) to preserve their status codes
