@@ -1,15 +1,11 @@
-name: Test Suite
+# Alternative: GitHub-only Test Summary (no external services)
+name: Test Suite (GitHub Only)
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
 
 jobs:
   test:
@@ -40,25 +36,16 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        # Run tests with coverage and generate reports
-        coverage run -m pytest tests/ --junitxml=pytest.xml --verbose
-        coverage report --show-missing
-        coverage xml
+        coverage run -m pytest tests/ --junitxml=pytest.xml --verbose --tb=short
+        coverage report --show-missing --format=markdown > coverage-report.md
         coverage html
-      working-directory: .
 
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-
-    - name: Coverage comment
-      uses: py-cov-action/python-coverage-comment-action@v3
-      with:
-        GITHUB_TOKEN: ${{ github.token }}
-        MINIMUM_GREEN: 80
-        MINIMUM_ORANGE: 70
-      continue-on-error: true
+    - name: Add coverage to summary
+      run: |
+        echo "## 📊 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+        cat coverage-report.md >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📁 [Download detailed HTML coverage report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
 
     - name: Publish test results
       uses: dorny/test-reporter@v1
@@ -68,12 +55,12 @@ jobs:
         path: pytest.xml
         reporter: java-junit
 
-    - name: Upload test results and coverage
+    - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results-and-coverage
+        name: coverage-report
         path: |
           htmlcov/
-          coverage.xml
+          coverage-report.md
           pytest.xml
