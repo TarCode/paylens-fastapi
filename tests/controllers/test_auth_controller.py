@@ -594,7 +594,8 @@ class TestAuthController:
                 # Verify response
                 assert response.status_code == 201
                 data = response.json()
-                assert "Password changed successfully" in data
+                assert "message" in data
+                assert data["message"] == "Password changed successfully"
                 
                 # Verify services were called
                 mock_user_service.find_by_id.assert_called_once_with(mock_current_user.id)
@@ -781,7 +782,8 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 201
             data = response.json()
-            assert "If an account with that email exists" in data
+            assert "message" in data
+            assert "If an account with that email exists" in data["message"]
             
             # Verify auth service was called
             mock_auth_service.generate_password_reset_token.assert_called_once_with(forgot_data["email"])
@@ -802,7 +804,8 @@ class TestAuthController:
             # Verify response (should still return success for security)
             assert response.status_code == 201
             data = response.json()
-            assert "If an account with that email exists" in data
+            assert "message" in data
+            assert "If an account with that email exists" in data["message"]
 
     # Reset Password Tests
     def test_reset_password_success(self, client, mock_auth_service, mock_user_service):
@@ -830,7 +833,10 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 200
             data = response.json()
-            assert "Password reset successfully" in data["message"]
+            assert "success" in data
+            assert "message" in data
+            assert data["success"] is True
+            assert data["message"] == "Password reset successfully"
             
             # Verify auth service was called
             mock_auth_service.validate_password.assert_called_once_with(reset_data["new_password"])
@@ -892,6 +898,8 @@ class TestAuthController:
             # Verify response
             assert response.status_code == 400
             data = response.json()
+            assert data["detail"]["success"] is False
+            assert "error" in data["detail"]
             assert "Invalid token" in data["detail"]["error"]["details"]
 
     # Google Auth Tests

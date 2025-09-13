@@ -1,8 +1,6 @@
 from typing import Any, Optional, Dict
 from fastapi import HTTPException, status
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from fastapi.encoders import jsonable_encoder
 
 # Response Utilities
 class SuccessResponse(BaseModel):
@@ -14,16 +12,6 @@ class SuccessResponse(BaseModel):
 class ErrorResponse(BaseModel):
     success: bool = False
     error: Dict[str, Any]
-
-
-def ok(data: Optional[Any] = None) -> JSONResponse:
-    """Return successful response with data"""
-    return JSONResponse(content=jsonable_encoder(data))
-
-
-def created(data: Optional[Any] = None) -> JSONResponse:
-    """Return created response with optional data and message"""
-    return JSONResponse(status_code=201, content=jsonable_encoder(data))
 
 
 def bad_request(error: Any, message: str = "Bad request") -> HTTPException:
