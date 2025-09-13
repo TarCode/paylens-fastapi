@@ -184,9 +184,11 @@ def mock_fastapi_app():
     """Mock FastAPI app for testing."""
     from fastapi import FastAPI
     from app.controllers.auth import auth_router
+    from app.controllers.usage import usage_router
     
     app = FastAPI()
     app.include_router(auth_router)
+    app.include_router(usage_router)
     return app
 
 
@@ -303,6 +305,126 @@ def faker():
     """Faker instance for generating test data."""
     from faker import Faker
     return Faker()
+
+
+@pytest.fixture
+def sample_usage_increment_result():
+    """Sample usage increment result for testing."""
+    from models.user import UserInternal, UserRole, SubscriptionTier
+    
+    user = UserInternal(
+        id="test-user-id",
+        email="test@example.com",
+        password="hashed_password",
+        google_id=None,
+        first_name="John",
+        last_name="Doe",
+        company_name="Test Company",
+        role=UserRole.USER,
+        subscription_tier=SubscriptionTier.FREE,
+        monthly_limit=5,
+        usage_count=1,
+        last_usage_reset=datetime.now(timezone.utc),
+        billing_period_start=datetime.now(timezone.utc),
+        is_active=True,
+        email_verified=True,
+        email_verification_token=None,
+        password_reset_token=None,
+        password_reset_expires=None,
+        stripe_customer_id=None,
+        subscription_id=None,
+        subscription_status=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    return {
+        "user": user,
+        "can_increment": True,
+        "was_reset": False
+    }
+
+
+@pytest.fixture
+def sample_usage_limit_exceeded_result():
+    """Sample usage limit exceeded result for testing."""
+    from models.user import UserInternal, UserRole, SubscriptionTier
+    
+    user = UserInternal(
+        id="test-user-id",
+        email="test@example.com",
+        password="hashed_password",
+        google_id=None,
+        first_name="John",
+        last_name="Doe",
+        company_name="Test Company",
+        role=UserRole.USER,
+        subscription_tier=SubscriptionTier.FREE,
+        monthly_limit=5,
+        usage_count=5,
+        last_usage_reset=datetime.now(timezone.utc),
+        billing_period_start=datetime.now(timezone.utc),
+        is_active=True,
+        email_verified=True,
+        email_verification_token=None,
+        password_reset_token=None,
+        password_reset_expires=None,
+        stripe_customer_id=None,
+        subscription_id=None,
+        subscription_status=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    
+    return {
+        "user": user,
+        "can_increment": False,
+        "error": "Usage limit exceeded. Current: 5, Limit: 5",
+        "was_reset": False
+    }
+
+
+@pytest.fixture
+def mock_auth_middleware_user():
+    """Mock user for auth middleware testing."""
+    from middleware.auth_middleware import User
+    from models.user import UserRole, SubscriptionTier
+    
+    return User(
+        id="test-user-id",
+        email="test@example.com",
+        role=UserRole.USER,
+        subscription_tier=SubscriptionTier.FREE,
+        usage_count=0,
+        monthly_limit=5,
+        last_usage_reset=datetime.now(timezone.utc),
+        billing_period_start=datetime.now(timezone.utc)
+    )
+
+
+@pytest.fixture
+def usage_error_details():
+    """Sample error details for usage validation testing."""
+    from validation.usage_validation import ErrorDetailsResponse
+    
+    return ErrorDetailsResponse(
+        message="Usage limit exceeded",
+        code="USAGE_LIMIT_EXCEEDED",
+        current_usage=5,
+        limit=5,
+        was_reset=False
+    )
+
+
+@pytest.fixture
+def rate_limit_error_details():
+    """Sample rate limit error details for testing."""
+    from validation.usage_validation import ErrorDetailsResponse
+    
+    return ErrorDetailsResponse(
+        message="Request too frequent. Please wait before trying again.",
+        code="REQUEST_TOO_FREQUENT"
+    )
 
 
 @pytest.fixture(autouse=True)

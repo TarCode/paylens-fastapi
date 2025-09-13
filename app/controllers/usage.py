@@ -1,6 +1,6 @@
 import time
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from pydantic import BaseModel
 from services.auth_service import auth_service
 from services.user_service import user_service
@@ -80,10 +80,14 @@ async def increment_usage(request: Request, current_user: User = Depends(get_cur
         if not result["can_increment"]:
             # Log usage limit violations for monitoring
             if result.get("error", "").find("limit exceeded") != -1:
+                subscription_tier_value = None
+                if result["user"]:
+                    subscription_tier_value = result["user"].subscription_tier.value if hasattr(result["user"].subscription_tier, 'value') else str(result["user"].subscription_tier)
+                
                 print(f"🚨 Usage limit exceeded for user {user_id} from {request.client.host if request.client else 'unknown'}:", {
                     "current_usage": result["user"].usage_count if result["user"] else None,
                     "monthly_limit": result["user"].monthly_limit if result["user"] else None,
-                    "subscription_tier": result["user"].subscription_tier.value if result["user"] else None
+                    "subscription_tier": subscription_tier_value
                 })
 
             # Determine appropriate status code based on error
@@ -112,6 +116,9 @@ async def increment_usage(request: Request, current_user: User = Depends(get_cur
             was_reset=result.get("was_reset", False)
         )
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (like too_many_requests) to preserve their status codes
+        raise
     except Exception as error:
         print(f"Increment usage error: {error}")
         raise server_error("Failed to increment usage")
@@ -137,13 +144,19 @@ async def get_usage(current_user: User = Depends(get_current_user)):
         if user.monthly_limit > 0:
             usage_percentage = round((user.usage_count / user.monthly_limit) * 100)
 
+        # Handle both enum and string values for subscription_tier
+        subscription_tier_value = user.subscription_tier.value if hasattr(user.subscription_tier, 'value') else str(user.subscription_tier)
+        
         return GetUsageResponse(
             usage_count=user.usage_count,
             monthly_limit=user.monthly_limit,
-            subscription_tier=user.subscription_tier.value,
+            subscription_tier=subscription_tier_value,
             usage_percentage=usage_percentage
         )
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (like not_found) to preserve their status codes
+        raise
     except Exception as error:
         print(f"Get usage error: {error}")
         raise server_error("Failed to get usage data")
