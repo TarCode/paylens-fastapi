@@ -12,7 +12,6 @@ A secure FastAPI backend for user authentication and management with JWT tokens 
 - Password reset functionality
 - User profile management
 - Role-based access control
-- Comprehensive test suite (188 tests, 69% coverage)
 
 ## Quick Start
 
