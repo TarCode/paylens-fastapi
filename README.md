@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/TarCode/paylens-fastapi/branch/main/graph/badge.svg)](https://codecov.io/gh/TarCode/paylens-fastapi)
 [![Tests](https://github.com/TarCode/paylens-fastapi/actions/workflows/test.yml/badge.svg)](https://github.com/TarCode/paylens-fastapi/actions/workflows/test.yml)
 
-A secure FastAPI backend for user authentication and management with JWT tokens and Google OAuth support.
+A secure FastAPI backend for user authentication with JWT tokens and Google OAuth support.
 
 ## Features
 
@@ -11,7 +11,6 @@ A secure FastAPI backend for user authentication and management with JWT tokens 
 - JWT token management with refresh tokens
 - Password reset functionality
 - User profile management
-- Role-based access control
 
 ## Quick Start
 
